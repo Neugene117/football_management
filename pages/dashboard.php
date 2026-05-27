@@ -1,208 +1,142 @@
-﻿<?php
-$totalTeams = db_table_count('teams');
-$totalPlayers = db_table_count('players');
-$totalMatches = db_table_count('matches');
-$totalStadiums = db_table_count('stadiums');
-$activeSeasons = db_table_count('seasons', 'is_active = 1');
-$totalOfficials = db_table_count('match_officials');
-$totalNews = db_table_count('news');
+<?php
+$totalUsers = (int) db_table_count('users');
+$totalAppointments = (int) db_table_count('matches');
+$totalPosts = (int) db_table_count('news');
+$totalMessages = (int) db_table_count('notifications', 'is_read = 0');
 
-$pendingApprovals = db_table_count('approvals', 'status = ?', 's', ['pending']);
-
-$prCol = pick_status_column('player_rankings');
-if ($prCol) {
-    $pendingApprovals += db_table_count('player_rankings', "`{$prCol}` = 'pending'");
-}
-$psCol = pick_status_column('player_statistics');
-if ($psCol) {
-    $pendingApprovals += db_table_count('player_statistics', "`{$psCol}` = 'pending'");
-}
-$rtCol = pick_status_column('player_ratings');
-if ($rtCol) {
-    $pendingApprovals += db_table_count('player_ratings', "`{$rtCol}` = 'pending'");
+$trendRows = db_fetch_all("SELECT MONTH(created_at) m, COUNT(*) c FROM matches WHERE created_at >= DATE_SUB(NOW(), INTERVAL 7 MONTH) GROUP BY YEAR(created_at), MONTH(created_at) ORDER BY YEAR(created_at), MONTH(created_at)");
+$trendValues = array_map('intval', array_column($trendRows, 'c'));
+if (count($trendValues) < 6) {
+    $trendValues = [12, 19, 15, 25, 22, 30];
 }
 
-$recentActivities = db_fetch_all(
-    'SELECT al.*, u.full_name FROM activity_logs al LEFT JOIN users u ON u.id = al.user_id ORDER BY al.created_at DESC LIMIT 8'
-);
+$recentActivities = db_fetch_all('SELECT action, module, created_at, target_type FROM activity_logs ORDER BY created_at DESC LIMIT 4');
 
-$approvalRequests = db_fetch_all(
-    'SELECT a.*, u.full_name FROM approvals a LEFT JOIN users u ON u.id = a.submitted_by ORDER BY a.created_at DESC LIMIT 6'
-);
+if (!function_exists('dashboard_time_ago')) {
+    function dashboard_time_ago($datetime)
+    {
+        $timestamp = strtotime((string) $datetime);
+        if (!$timestamp) {
+            return 'Just now';
+        }
 
-$latestTeams = db_fetch_all('SELECT name, city, founded_year, created_at, is_active FROM teams ORDER BY created_at DESC LIMIT 6');
-$federationActions = db_fetch_all("SELECT action, module, created_at FROM activity_logs WHERE module IN ('teams','approvals','users','news') ORDER BY created_at DESC LIMIT 8");
-$approvalNotifications = db_fetch_all('SELECT title, created_at, is_read FROM notifications ORDER BY created_at DESC LIMIT 8');
+        $diff = max(1, time() - $timestamp);
+        if ($diff < 3600) {
+            $mins = (int) floor($diff / 60);
+            return ($mins > 1 ? $mins : 1) . ' minutes ago';
+        }
 
-$teamRegRows = db_fetch_all("SELECT DATE_FORMAT(created_at, '%b') as m, COUNT(*) c FROM teams WHERE created_at >= DATE_SUB(NOW(), INTERVAL 6 MONTH) GROUP BY YEAR(created_at), MONTH(created_at) ORDER BY YEAR(created_at), MONTH(created_at)");
-$teamRegVals = array_column($teamRegRows, 'c');
-if (count($teamRegVals) < 2) {
-    $teamRegVals = [2, 4, 3, 6, 5, 7];
+        if ($diff < 86400) {
+            $hours = (int) floor($diff / 3600);
+            return $hours . ' hours ago';
+        }
+
+        $days = (int) floor($diff / 86400);
+        return $days . ' days ago';
+    }
 }
 
-$matchStats = [];
-$matchStatuses = ['scheduled', 'lineup_pending', 'lineup_approved', 'in_progress', 'completed', 'postponed'];
-foreach ($matchStatuses as $s) {
-    $matchStats[] = db_table_count('matches', 'status = ?', 's', [$s]);
-}
-if (array_sum($matchStats) === 0) {
-    $matchStats = [3, 6, 4, 2, 5, 1];
-}
+$activityIconMap = [
+    'users' => 'user-add',
+    'news' => 'news',
+    'teams' => 'team',
+    'matches' => 'calendar',
+    'approvals' => 'approval',
+];
 
-$rankingApprovedVals = [];
-if ($prCol) {
-    $rows = db_fetch_all("SELECT MONTH(updated_at) m, COUNT(*) c FROM player_rankings WHERE `{$prCol}` = 'approved' AND updated_at >= DATE_SUB(NOW(), INTERVAL 6 MONTH) GROUP BY MONTH(updated_at) ORDER BY MONTH(updated_at)");
-    $rankingApprovedVals = array_column($rows, 'c');
-}
-if (count($rankingApprovedVals) < 2) {
-    $rankingApprovedVals = [1, 2, 2, 3, 5, 4];
-}
-
-$stats = [
-    ['Total Teams', $totalTeams, 'team'],
-    ['Total Players', $totalPlayers, 'users'],
-    ['Total Matches', $totalMatches, 'dashboard'],
-    ['Pending Approvals', $pendingApprovals, 'approval'],
-    ['Total Stadiums', $totalStadiums, 'stadium'],
-    ['Active Seasons', $activeSeasons, 'season'],
-    ['Total Officials', $totalOfficials, 'users'],
-    ['Total News', $totalNews, 'news'],
+$quickActions = [
+    ['index.php?page=news', 'New Blog Post', 'add'],
+    ['index.php?page=teams', 'Add Team', 'team'],
+    ['index.php?page=reports', 'Upload Reports', 'upload'],
+    ['index.php?page=users', 'Add User', 'user-add'],
 ];
 ?>
 
-<div class="grid stats-grid">
-    <?php foreach ($stats as $s): ?>
-        <div class="card stat-card">
-            <div class="stat-icon"><?= icon_svg($s[2]); ?></div>
-            <div>
-                <div class="stat-value" data-counter="<?= (int) $s[1]; ?>">0</div>
-                <div class="stat-label"><?= e($s[0]); ?></div>
+<div class="dashboard-metrics">
+    <div class="card dash-stat-card">
+        <div class="dash-stat-icon"><?= icon_svg('users'); ?></div>
+        <div>
+            <div class="dash-stat-value" data-counter="<?= $totalUsers; ?>">0</div>
+            <div class="dash-stat-label">Total Users</div>
+        </div>
+    </div>
+
+    <div class="card dash-stat-card">
+        <div class="dash-stat-icon"><?= icon_svg('calendar'); ?></div>
+        <div>
+            <div class="dash-stat-value" data-counter="<?= $totalAppointments; ?>">0</div>
+            <div class="dash-stat-label">Appointments</div>
+        </div>
+    </div>
+
+    <div class="card dash-stat-card">
+        <div class="dash-stat-icon"><?= icon_svg('news'); ?></div>
+        <div>
+            <div class="dash-stat-value" data-counter="<?= $totalPosts; ?>">0</div>
+            <div class="dash-stat-label">Blog Posts</div>
+        </div>
+    </div>
+
+    <div class="card dash-stat-card">
+        <div class="dash-stat-icon"><?= icon_svg('mail'); ?></div>
+        <div>
+            <div class="dash-stat-value" data-counter="<?= $totalMessages; ?>">0</div>
+            <div class="dash-stat-label">Messages</div>
+        </div>
+    </div>
+</div>
+
+<div class="dashboard-grid mt-12">
+    <section class="card dash-panel">
+        <div class="card-head">
+            <h3>Appointment Trends</h3>
+            <div class="dash-tools">
+                <button type="button" class="dash-tool-btn"><?= icon_svg('refresh'); ?></button>
+                <button type="button" class="dash-tool-btn"><?= icon_svg('dots'); ?></button>
             </div>
         </div>
-    <?php endforeach; ?>
-</div>
-
-<div class="two-col mt-12">
-    <div class="card">
-        <div class="card-head"><h3>Team Registrations Chart</h3></div>
-        <div class="card-body chart"><canvas data-line-chart data-values="<?= e(implode(',', $teamRegVals)); ?>"></canvas></div>
-    </div>
-    <div class="card">
-        <div class="card-head"><h3>Match Statistics Chart</h3></div>
-        <div class="card-body chart"><canvas data-bar-chart data-values="<?= e(implode(',', $matchStats)); ?>"></canvas></div>
-    </div>
-</div>
-
-<div class="two-col mt-12">
-    <div class="card">
-        <div class="card-head"><h3>Player Ranking Approvals</h3></div>
-        <div class="card-body chart"><canvas data-line-chart data-values="<?= e(implode(',', $rankingApprovedVals)); ?>"></canvas></div>
-    </div>
-    <div class="card">
-        <div class="card-head"><h3>Match Approval Requests</h3></div>
-        <div class="card-body panel-list">
-            <?php if (empty($approvalRequests)): ?>
-                <div class="empty-state">No approval requests found.</div>
-            <?php else: ?>
-                <?php foreach ($approvalRequests as $a): ?>
-                    <div class="list-item">
-                        <div>
-                            <div class="list-title"><?= e(ucfirst($a['item_type'])); ?> #<?= (int) $a['item_id']; ?></div>
-                            <div class="small muted">By <?= e($a['full_name'] ?: 'Unknown'); ?></div>
-                        </div>
-                        <?= status_badge($a['status']); ?>
-                    </div>
-                <?php endforeach; ?>
-            <?php endif; ?>
+        <div class="card-body chart dash-chart">
+            <canvas data-line-chart data-values="<?= e(implode(',', $trendValues)); ?>" data-color="#0d6b4e" data-fill="rgba(13,107,78,0.16)"></canvas>
         </div>
-    </div>
-</div>
+    </section>
 
-<div class="three-col mt-12">
-    <div class="card">
-        <div class="card-head"><h3>Recent Activities</h3></div>
-        <div class="card-body panel-list">
+    <section class="card dash-panel">
+        <div class="card-head">
+            <h3>Recent Activities</h3>
+            <a class="dash-view-all" href="index.php?page=activity_logs">View All</a>
+        </div>
+        <div class="card-body dash-activity-list">
             <?php if (empty($recentActivities)): ?>
-                <div class="empty-state">No recent activities.</div>
+                <div class="empty-state">No recent activity found.</div>
             <?php else: ?>
-                <?php foreach ($recentActivities as $act): ?>
-                    <div class="list-item">
+                <?php foreach ($recentActivities as $row):
+                    $module = (string) ($row['module'] ?? '');
+                    $icon = $activityIconMap[$module] ?? 'dashboard';
+                    $actionText = ucwords(str_replace('_', ' ', (string) ($row['action'] ?? 'Activity')));
+                ?>
+                    <div class="dash-activity-item">
+                        <span class="dash-activity-icon"><?= icon_svg($icon); ?></span>
                         <div>
-                            <div class="list-title"><?= e($act['action']); ?> <span class="muted">(<?= e($act['module']); ?>)</span></div>
-                            <div class="small muted"><?= e($act['full_name'] ?: 'System'); ?> - <?= e(date('d M H:i', strtotime($act['created_at']))); ?></div>
+                            <p><?= e($actionText); ?></p>
+                            <small><?= e(dashboard_time_ago($row['created_at'] ?? '')); ?></small>
                         </div>
                     </div>
                 <?php endforeach; ?>
             <?php endif; ?>
         </div>
-    </div>
+    </section>
 
-    <div class="card">
-        <div class="card-head"><h3>Latest Registered Teams</h3></div>
-        <div class="card-body panel-list">
-            <?php if (empty($latestTeams)): ?>
-                <div class="empty-state">No teams yet.</div>
-            <?php else: ?>
-                <?php foreach ($latestTeams as $team): ?>
-                    <div class="list-item">
-                        <div>
-                            <div class="list-title"><?= e($team['name']); ?></div>
-                            <div class="small muted"><?= e($team['city'] ?: 'N/A'); ?> • Founded <?= e($team['founded_year'] ?: '-'); ?></div>
-                        </div>
-                        <?= status_badge(((int) $team['is_active'] === 1) ? 'active' : 'pending'); ?>
-                    </div>
-                <?php endforeach; ?>
-            <?php endif; ?>
+    <section class="card dash-panel">
+        <div class="card-head">
+            <h3>Quick Actions</h3>
         </div>
-    </div>
-
-    <div class="card">
-        <div class="card-head"><h3>Approval Notifications</h3></div>
-        <div class="card-body panel-list">
-            <?php if (empty($approvalNotifications)): ?>
-                <div class="empty-state">No notifications found.</div>
-            <?php else: ?>
-                <?php foreach ($approvalNotifications as $n): ?>
-                    <div class="list-item">
-                        <div>
-                            <div class="list-title"><?= e($n['title']); ?></div>
-                            <div class="small muted"><?= e(date('d M Y H:i', strtotime($n['created_at']))); ?></div>
-                        </div>
-                        <?= status_badge((int) $n['is_read'] === 1 ? 'approved' : 'pending'); ?>
-                    </div>
-                <?php endforeach; ?>
-            <?php endif; ?>
+        <div class="card-body dash-actions-grid">
+            <?php foreach ($quickActions as $act): ?>
+                <a href="<?= e($act[0]); ?>" class="dash-action-btn">
+                    <span><?= icon_svg($act[2]); ?></span>
+                    <strong><?= e($act[1]); ?></strong>
+                </a>
+            <?php endforeach; ?>
         </div>
-    </div>
+    </section>
 </div>
-
-<div class="card mt-12">
-    <div class="card-head"><h3>Recent Federation Actions</h3></div>
-    <div class="card-body">
-        <?php if (empty($federationActions)): ?>
-            <div class="empty-state">No federation actions logged yet.</div>
-        <?php else: ?>
-            <div class="table-wrap">
-                <table class="data-table">
-                    <thead>
-                        <tr>
-                            <th>Action</th>
-                            <th>Module</th>
-                            <th>Date</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <?php foreach ($federationActions as $fa): ?>
-                            <tr>
-                                <td><?= e($fa['action']); ?></td>
-                                <td><?= e($fa['module']); ?></td>
-                                <td><?= e(date('d M Y H:i', strtotime($fa['created_at']))); ?></td>
-                            </tr>
-                        <?php endforeach; ?>
-                    </tbody>
-                </table>
-            </div>
-        <?php endif; ?>
-    </div>
-</div>
-

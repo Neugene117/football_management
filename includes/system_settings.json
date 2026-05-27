@@ -1,7 +1,7 @@
-﻿{
-  "system_name": "Football Federation Admin Dashboard",
-  "system_email": "federation@example.com",
-  "primary_color": "#ff7a00",
-  "secondary_color": "#0b1f3a",
-  "logo": "assets/images/federation-logo.svg"
+{
+    "system_name": "Football Federation Admin Dashboard",
+    "system_email": "federation@example.com",
+    "primary_color": "#ff7a00",
+    "secondary_color": "#0b1f3a",
+    "logo": "assets\/images\/img_6a171a0073d9c7.45612662.jpeg"
 }

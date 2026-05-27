@@ -300,6 +300,15 @@ function icon_svg($name)
         'notification' => '<svg viewBox=\"0 0 24 24\"><path d=\"M12 22a2.5 2.5 0 002.5-2.5h-5A2.5 2.5 0 0012 22zm8-6V11a8 8 0 10-16 0v5L2 18v1h20v-1l-2-2z\"/></svg>',
         'search' => '<svg viewBox=\"0 0 24 24\"><path d=\"M10 2a8 8 0 015.3 14l4.3 4.3-1.4 1.4-4.3-4.3A8 8 0 1110 2zm0 2a6 6 0 100 12 6 6 0 000-12z\"/></svg>',
         'add' => '<svg viewBox=\"0 0 24 24\"><path d=\"M19 11h-6V5h-2v6H5v2h6v6h2v-6h6v-2z\"/></svg>',
+        'menu' => '<svg viewBox=\"0 0 24 24\"><path d=\"M3 6h18v2H3V6zm0 5h18v2H3v-2zm0 5h18v2H3v-2z\"/></svg>',
+        'chevron-down' => '<svg viewBox=\"0 0 24 24\"><path d=\"M7 10l5 5 5-5z\"/></svg>',
+        'chevron-right' => '<svg viewBox=\"0 0 24 24\"><path d=\"M9 6l6 6-6 6z\"/></svg>',
+        'calendar' => '<svg viewBox=\"0 0 24 24\"><path d=\"M7 2h2v2h6V2h2v2h3v18H4V4h3V2zm12 8H5v10h14V10z\"/></svg>',
+        'mail' => '<svg viewBox=\"0 0 24 24\"><path d=\"M3 6h18v12H3V6zm9 6l9-6H3l9 6z\"/></svg>',
+        'upload' => '<svg viewBox=\"0 0 24 24\"><path d=\"M5 20h14v-2H5v2zM11 4v8H8l4 4 4-4h-3V4h-2z\"/></svg>',
+        'user-add' => '<svg viewBox=\"0 0 24 24\"><path d=\"M15 12c2.8 0 5-2.2 5-5s-2.2-5-5-5-5 2.2-5 5 2.2 5 5 5zm-8 1v-3H5v3H2v2h3v3h2v-3h3v-2H7zm8 1c-3.3 0-10 1.7-10 5v3h20v-3c0-3.3-6.7-5-10-5z\"/></svg>',
+        'refresh' => '<svg viewBox=\"0 0 24 24\"><path d=\"M17.7 6.3A8 8 0 106.3 17.7l1.4-1.4A6 6 0 1112 18a6 6 0 005.7-8H15V8h7v7h-2V11a8 8 0 00-2.3-4.7z\"/></svg>',
+        'dots' => '<svg viewBox=\"0 0 24 24\"><path d=\"M12 8a2 2 0 110-4 2 2 0 010 4zm0 8a2 2 0 110-4 2 2 0 010 4zm0 8a2 2 0 110-4 2 2 0 010 4z\"/></svg>',
     ];
 
     return $icons[$name] ?? $icons['dashboard'];

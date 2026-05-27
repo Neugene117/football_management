@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 session_start();
 define('APP_BASE', '');
 require_once __DIR__ . '/includes/functions.php';
@@ -19,7 +19,7 @@ $settings = load_system_settings();
       <img src="<?= e(app_url($settings['logo'])); ?>" alt="logo">
       <span><?= e($settings['system_name']); ?></span>
     </div>
-    <a href="federation/login.php" class="btn btn-primary btn-sm">Login</a>
+    <a href="login.php" class="btn btn-primary btn-sm">Login</a>
   </header>
 
   <main class="landing-main">
@@ -32,15 +32,15 @@ $settings = load_system_settings();
           <li><?= icon_svg('report'); ?> Real-time performance and reports</li>
           <li><?= icon_svg('users'); ?> Role-based access for federation and teams</li>
         </ul>
-        <a href="federation/login.php" class="btn btn-primary">Enter Federation Panel</a>
+        <a href="login.php" class="btn btn-primary">Sign In</a>
       </section>
 
       <aside class="hero-side">
-        <h3 class="landing-side-title">Choose Your Workspace</h3>
-        <p class="landing-side-text">Both dashboards share one visual system, but each has dedicated navigation and workflows.</p>
+        <h3 class="landing-side-title">Single Secure Access</h3>
+        <p class="landing-side-text">All users sign in from one secure page and are automatically sent to the correct dashboard.</p>
         <div class="panel-links">
-          <a class="panel-link" href="federation/login.php"><span>Federation Dashboard</span><span>Open</span></a>
-          <a class="panel-link" href="team/login.php"><span>Team Dashboard</span><span>Open</span></a>
+          <a class="panel-link" href="login.php"><span>Federation Dashboard</span><span>Open</span></a>
+          <a class="panel-link" href="login.php"><span>Team Dashboard</span><span>Open</span></a>
         </div>
       </aside>
     </div>

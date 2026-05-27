@@ -35,16 +35,17 @@ include __DIR__ . '/sidebar.php';
 ?>
 <div class="main">
     <header class="topbar">
-        <button class="menu-toggle" id="sidebarToggle" type="button"><?= icon_svg('dashboard'); ?></button>
+        <button class="menu-toggle" id="sidebarToggle" type="button"><?= icon_svg('menu'); ?></button>
         <div class="top-logo">
             <img src="<?= e(app_url($settings['logo'])); ?>" alt="logo">
-            <h2>Team Workspace</h2>
+            <h2><?= e(strtoupper($settings['system_name'])); ?></h2>
         </div>
         <div class="spacer"></div>
         <div class="dropdown">
             <button class="profile-btn dropdown-toggle" type="button">
-                <img src="<?= e(app_url($currentUser['profile_photo'] ?: 'assets/images/federation-logo.svg')); ?>" alt="profile">
-                <span><?= e($currentUser['full_name']); ?></span>
+                <span class="profile-mini-icon"><?= icon_svg('profile'); ?></span>
+                <span class="profile-mini-name"><?= e($currentUser['full_name']); ?></span>
+                <?= icon_svg('chevron-down'); ?>
             </button>
             <div class="dropdown-menu">
                 <a href="index.php?page=profile">Profile</a>
@@ -53,15 +54,17 @@ include __DIR__ . '/sidebar.php';
         </div>
     </header>
 
-    <main class="content">
-        <div class="page-head">
+    <main class="content <?= $page === 'dashboard' ? 'dashboard-content' : ''; ?>">
+        <div class="page-head <?= $page === 'dashboard' ? 'dashboard-head' : ''; ?>">
             <div>
-                <h1><?= e($titles[$page] ?? 'Team Dashboard'); ?></h1>
-                <p class="muted">Operational tools for team managers and coaches.</p>
+                <h1><?= e($page === 'dashboard' ? 'Dashboard Overview' : ($titles[$page] ?? 'Team Dashboard')); ?></h1>
+                <p class="muted"><?= e($page === 'dashboard' ? "Welcome back, {$currentUser['full_name']}! Here's what's happening today." : 'Operational tools for team managers and coaches.'); ?></p>
             </div>
-            <div class="breadcrumbs">
-                <a href="index.php?page=dashboard">Home</a><span>/</span><span><?= e($titles[$page] ?? 'Team Dashboard'); ?></span>
-            </div>
+            <?php if ($page !== 'dashboard'): ?>
+                <div class="breadcrumbs">
+                    <a href="index.php?page=dashboard">Home</a><span>/</span><span><?= e($titles[$page] ?? 'Team Dashboard'); ?></span>
+                </div>
+            <?php endif; ?>
         </div>
 
         <?php foreach (get_flashes() as $flash): ?>

@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
@@ -12,4 +12,4 @@ if (!empty($_SESSION['user'])) {
 
 $_SESSION = [];
 session_destroy();
-redirect_to('login.php');
+redirect_to('../login.php');

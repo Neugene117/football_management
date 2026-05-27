@@ -88,7 +88,7 @@
     requestAnimationFrame(animate);
   });
 
-  function drawLineChart(canvas, values, color) {
+  function drawLineChart(canvas, values, color, fillColor) {
     if (!canvas || values.length < 1) return;
     const ctx = canvas.getContext('2d');
     const width = canvas.offsetWidth;
@@ -121,6 +121,25 @@
       else ctx.lineTo(x, y);
     });
     ctx.stroke();
+
+    if (values.length > 1) {
+      ctx.lineTo(width, height - 10);
+      ctx.lineTo(0, height - 10);
+      ctx.closePath();
+      ctx.fillStyle = fillColor;
+      ctx.fill();
+
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2.4;
+      ctx.beginPath();
+      values.forEach((v, i) => {
+        const x = i * stepX;
+        const y = height - (v / max) * (height - 22) - 11;
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      });
+      ctx.stroke();
+    }
 
     ctx.fillStyle = color;
     values.forEach((v, i) => {
@@ -157,7 +176,12 @@
 
   document.querySelectorAll('[data-line-chart]').forEach((cv) => {
     const values = (cv.dataset.values || '').split(',').map((v) => parseFloat(v) || 0);
-    drawLineChart(cv, values, '#ff7a00');
+    drawLineChart(
+      cv,
+      values,
+      cv.dataset.color || '#0d6b4e',
+      cv.dataset.fill || 'rgba(13, 107, 78, 0.16)'
+    );
   });
 
   document.querySelectorAll('[data-bar-chart]').forEach((cv) => {

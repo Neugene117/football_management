@@ -1,66 +1,66 @@
-﻿<?php
+<?php
 $current = $page ?? 'dashboard';
+$userCount = (int) db_table_count('users');
+$pendingApprovals = (int) db_table_count('approvals', 'status = ?', 's', ['pending']);
+
 $groups = [
     [
         'title' => 'Overview',
-        'icon' => 'dashboard',
+        'icon' => 'fa-gauge-high',
         'items' => [
-            ['dashboard', 'Dashboard', 'dashboard'],
-            ['activity_logs', 'Activity Logs', 'logs'],
-            ['reports', 'Reports', 'report'],
+            ['dashboard', 'Dashboard', 'fa-gauge-high', null],
+            ['reports', 'Reports', 'fa-chart-column', null],
+            ['activity_logs', 'Activity Logs', 'fa-clock-rotate-left', null],
         ],
     ],
     [
-        'title' => 'Teams & Seasons',
-        'icon' => 'team',
+        'title' => 'People',
+        'icon' => 'fa-users',
         'items' => [
-            ['teams', 'Teams Management', 'team'],
-            ['team_registrations', 'Team Registrations', 'team'],
-            ['stadiums', 'Stadium Management', 'stadium'],
-            ['seasons', 'Seasons Management', 'season'],
+            ['users', 'Users', 'fa-users', $userCount > 0 ? $userCount : null],
+            ['match_officials', 'Officials', 'fa-user-shield', null],
         ],
     ],
     [
-        'title' => 'Users & Roles',
-        'icon' => 'users',
+        'title' => 'Competitions',
+        'icon' => 'fa-trophy',
         'items' => [
-            ['users', 'Users Management', 'users'],
-            ['roles_permissions', 'Roles & Permissions', 'settings'],
-            ['assign_roles', 'Assign Roles', 'users'],
+            ['teams', 'Teams', 'fa-shield-halved', null],
+            ['team_registrations', 'Registrations', 'fa-clipboard-check', null],
+            ['seasons', 'Seasons', 'fa-calendar-days', null],
         ],
     ],
     [
-        'title' => 'Approvals',
-        'icon' => 'approval',
+        'title' => 'Infrastructure',
+        'icon' => 'fa-location-dot',
         'items' => [
-            ['player_rankings_approval', 'Ranking Approvals', 'approval'],
-            ['player_ratings_approval', 'Ratings Approvals', 'approval'],
-            ['player_statistics_approval', 'Statistics Approvals', 'approval'],
-            ['match_results_approval', 'Match Results', 'approval'],
-            ['match_lineups_approval', 'Match Lineups', 'approval'],
+            ['stadiums', 'Stadiums', 'fa-location-dot', null],
+            ['news', 'News', 'fa-newspaper', null],
         ],
     ],
     [
-        'title' => 'Match Center',
-        'icon' => 'season',
+        'title' => 'Player Approvals',
+        'icon' => 'fa-user-check',
         'items' => [
-            ['match_officials', 'Match Officials', 'users'],
-            ['news', 'News Management', 'news'],
-            ['settings', 'Settings', 'settings'],
-            ['profile', 'Profile', 'profile'],
+            ['player_rankings_approval', 'Ranking Approvals', 'fa-list-ol', $pendingApprovals > 0 ? $pendingApprovals : null],
+            ['player_ratings_approval', 'Rating Approvals', 'fa-star-half-stroke', null],
+            ['player_statistics_approval', 'Statistics Approvals', 'fa-chart-line', null],
+        ],
+    ],
+    [
+        'title' => 'Match Approvals',
+        'icon' => 'fa-list-check',
+        'items' => [
+            ['match_results_approval', 'Result Approvals', 'fa-flag-checkered', null],
+            ['match_lineups_approval', 'Lineup Approvals', 'fa-clipboard-list', null],
         ],
     ],
 ];
 ?>
 <aside class="sidebar" id="sidebar">
-    <div class="sidebar-brand">
-        <img src="<?= e(app_url($settings['logo'])); ?>" alt="logo">
-        <div>
-            <div class="brand-title">Federation Admin</div>
-        </div>
-    </div>
+    <div class="sidebar-title-block">Admin</div>
 
-    <nav class="sidebar-nav">
+    <nav class="sidebar-nav sidebar-group-nav">
         <?php foreach ($groups as $group):
             $open = false;
             foreach ($group['items'] as $item) {
@@ -70,28 +70,25 @@ $groups = [
                 }
             }
         ?>
-        <div class="nav-group <?= $open ? 'open' : ''; ?>">
-            <button class="nav-group-title" type="button" data-nav-group>
-                <?= icon_svg($group['icon']); ?>
-                <span><?= e($group['title']); ?></span>
-                <svg class="chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6z"/></svg>
-            </button>
-            <div class="nav-sub">
-                <?php foreach ($group['items'] as $item): ?>
-                    <a class="nav-item <?= $current === $item[0] ? 'active' : ''; ?>" href="index.php?page=<?= e($item[0]); ?>">
-                        <?= icon_svg($item[2]); ?>
-                        <span><?= e($item[1]); ?></span>
-                    </a>
-                <?php endforeach; ?>
+            <div class="nav-group <?= $open ? 'open' : ''; ?>">
+                <button class="nav-group-title" type="button" data-nav-group title="<?= e($group['title']); ?>">
+                    <i class="fa-solid <?= e($group['icon']); ?> nav-group-fa" aria-hidden="true"></i>
+                    <span><?= e($group['title']); ?></span>
+                    <svg class="chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6z"/></svg>
+                </button>
+                <div class="nav-sub">
+                    <?php foreach ($group['items'] as $item): ?>
+                        <a class="nav-item <?= $current === $item[0] ? 'active' : ''; ?>" href="index.php?page=<?= e($item[0]); ?>" title="<?= e($item[1]); ?>">
+                            <i class="fa-solid <?= e($item[2]); ?> nav-fa" aria-hidden="true"></i>
+                            <span><?= e($item[1]); ?></span>
+                            <?php if ($item[3] !== null): ?>
+                                <span class="nav-badge"><?= (int) $item[3]; ?></span>
+                            <?php endif; ?>
+                        </a>
+                    <?php endforeach; ?>
+                </div>
             </div>
-        </div>
         <?php endforeach; ?>
     </nav>
 
-    <div class="sidebar-foot">
-        <a class="nav-item" href="logout.php">
-            <?= icon_svg('logout'); ?>
-            <span>Logout</span>
-        </a>
-    </div>
 </aside>
