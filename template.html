@@ -1,0 +1,815 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Nuwo Ni Uwacu Hub - Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Serif+Display&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --green-dark:   #1a5c3a;
+    --green-main:   #2d7a52;
+    --green-mid:    #3a9463;
+    --green-light:  #e8f5ee;
+    --green-pale:   #f3faf6;
+    --accent-gold:  #e8b84b;
+    --accent-red:   #e53935;
+    --text-dark:    #1a2b22;
+    --text-mid:     #4a6355;
+    --text-light:   #8aa898;
+    --border:       #ddeee6;
+    --white:        #ffffff;
+    --sidebar-w:    270px;
+    --header-h:     64px;
+    --radius:       14px;
+    --shadow-card:  0 2px 16px rgba(45,122,82,0.08);
+    --shadow-hover: 0 6px 28px rgba(45,122,82,0.15);
+    --transition:   0.22s cubic-bezier(.4,0,.2,1);
+  }
+
+  html, body { height: 100%; font-family: 'DM Sans', sans-serif; background: #f0f7f3; color: var(--text-dark); }
+
+  /* ── Scrollbar ── */
+  ::-webkit-scrollbar { width: 5px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--green-mid); border-radius: 99px; }
+
+  /* ════════════════════════════════
+     LAYOUT
+  ════════════════════════════════ */
+  .app { display: flex; height: 100vh; overflow: hidden; }
+
+  /* ── Sidebar ── */
+  .sidebar {
+    width: var(--sidebar-w);
+    background: var(--white);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+    overflow-y: auto;
+    position: relative;
+    z-index: 10;
+  }
+
+  .sidebar-brand {
+    padding: 0 18px;
+    height: var(--header-h);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border-bottom: 1px solid var(--border);
+  }
+  .brand-label {
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--text-mid);
+    text-transform: uppercase;
+    letter-spacing: .08em;
+  }
+
+  .sidebar-nav { flex: 1; padding: 14px 0; }
+
+  .nav-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 20px;
+    margin: 1px 10px;
+    border-radius: 10px;
+    cursor: pointer;
+    font-size: 14.5px;
+    font-weight: 450;
+    color: var(--text-mid);
+    transition: background var(--transition), color var(--transition);
+    position: relative;
+    user-select: none;
+  }
+  .nav-item:hover { background: var(--green-pale); color: var(--green-dark); }
+  .nav-item.active {
+    background: var(--green-light);
+    color: var(--green-dark);
+    font-weight: 600;
+    border-left: 3px solid var(--green-main);
+    padding-left: 17px;
+  }
+  .nav-icon {
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: .75;
+  }
+  .nav-item.active .nav-icon { opacity: 1; }
+
+  .nav-badge {
+    margin-left: auto;
+    min-width: 20px;
+    height: 20px;
+    border-radius: 99px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 0 5px;
+  }
+  .badge-green { background: var(--green-main); color: #fff; }
+  .badge-gold  { background: var(--accent-gold); color: #5a3a00; }
+  .badge-red   { background: var(--accent-red);  color: #fff; }
+
+  .sidebar-footer {
+    padding: 14px 20px 18px;
+    border-top: 1px solid var(--border);
+  }
+  .view-site-link {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: var(--text-light);
+    cursor: pointer;
+    transition: color var(--transition);
+  }
+  .view-site-link:hover { color: var(--green-main); }
+
+  /* ── Main ── */
+  .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+
+  /* ── Topbar ── */
+  .topbar {
+    height: var(--header-h);
+    background: var(--white);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    padding: 0 28px;
+    gap: 16px;
+    flex-shrink: 0;
+  }
+
+  .topbar-logo {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .topbar-logo-img {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: var(--green-light);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+  }
+  .topbar-logo-img svg { width: 28px; height: 28px; }
+  .topbar-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--green-dark);
+    letter-spacing: .02em;
+    text-transform: uppercase;
+  }
+
+  .topbar-spacer { flex: 1; }
+
+  .topbar-user {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+  }
+  .user-avatar {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--green-mid), var(--green-dark));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    font-weight: 700;
+    font-size: 13px;
+    flex-shrink: 0;
+    overflow: hidden;
+  }
+  .user-name {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-dark);
+  }
+
+  /* ── Content ── */
+  .content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 28px 30px 40px;
+  }
+
+  .page-header { margin-bottom: 24px; }
+  .page-title {
+    font-family: 'DM Serif Display', serif;
+    font-size: 26px;
+    color: var(--text-dark);
+    margin-bottom: 4px;
+  }
+  .page-subtitle { font-size: 14px; color: var(--text-light); font-weight: 400; }
+
+  /* ── Stat Cards ── */
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+
+  .stat-card {
+    background: var(--white);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px 20px 18px;
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+    transition: transform var(--transition), box-shadow var(--transition);
+    cursor: default;
+    animation: fadeUp .4s both;
+  }
+  .stat-card:hover { transform: translateY(-3px); box-shadow: var(--shadow-hover); }
+
+  .stat-icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 10px;
+    background: var(--green-light);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    color: var(--green-main);
+  }
+
+  .stat-body { flex: 1; }
+  .stat-value {
+    font-size: 30px;
+    font-weight: 700;
+    color: var(--text-dark);
+    line-height: 1;
+    margin-bottom: 4px;
+  }
+  .stat-label { font-size: 13px; color: var(--text-light); }
+
+  /* ── Bottom Grid ── */
+  .bottom-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 300px;
+    gap: 20px;
+  }
+
+  @media (max-width: 1100px) {
+    .bottom-grid { grid-template-columns: 1fr 1fr; }
+    .quick-actions-card { grid-column: 1 / -1; }
+  }
+
+  .card {
+    background: var(--white);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 22px;
+    animation: fadeUp .5s both;
+  }
+
+  .card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 18px;
+  }
+  .card-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-dark);
+  }
+  .card-action {
+    font-size: 13px;
+    color: var(--green-main);
+    cursor: pointer;
+    font-weight: 500;
+    transition: color var(--transition);
+  }
+  .card-action:hover { color: var(--green-dark); text-decoration: underline; }
+
+  .card-controls { display: flex; gap: 6px; }
+  .ctrl-btn {
+    width: 28px;
+    height: 28px;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    background: transparent;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-light);
+    transition: all var(--transition);
+  }
+  .ctrl-btn:hover { border-color: var(--green-main); color: var(--green-main); }
+
+  /* ── Chart ── */
+  .chart-wrap {
+    width: 100%;
+    height: 180px;
+    position: relative;
+    overflow: visible;
+  }
+  .chart-wrap canvas { width: 100% !important; height: 100% !important; }
+
+  /* ── Activities ── */
+  .activity-list { display: flex; flex-direction: column; gap: 0; }
+
+  .activity-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 13px 0;
+    border-bottom: 1px solid var(--border);
+    transition: background var(--transition);
+  }
+  .activity-item:last-child { border-bottom: none; }
+
+  .act-icon {
+    width: 34px;
+    height: 34px;
+    border-radius: 9px;
+    background: var(--green-light);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--green-main);
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+
+  .act-body { flex: 1; }
+  .act-text { font-size: 13.5px; color: var(--text-dark); line-height: 1.4; font-weight: 450; }
+  .act-time { font-size: 12px; color: var(--text-light); margin-top: 3px; }
+
+  /* ── Quick Actions ── */
+  .qa-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+
+  .qa-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 16px 10px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    cursor: pointer;
+    background: var(--green-pale);
+    transition: all var(--transition);
+    font-family: 'DM Sans', sans-serif;
+  }
+  .qa-btn:hover {
+    background: var(--green-light);
+    border-color: var(--green-mid);
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-card);
+  }
+  .qa-btn-icon {
+    width: 34px;
+    height: 34px;
+    border-radius: 9px;
+    background: var(--white);
+    border: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--green-main);
+    font-size: 18px;
+  }
+  .qa-btn-label { font-size: 12.5px; font-weight: 500; color: var(--text-dark); text-align: center; line-height: 1.3; }
+
+  /* ── Animations ── */
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(14px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .stat-card:nth-child(1) { animation-delay: .05s; }
+  .stat-card:nth-child(2) { animation-delay: .10s; }
+  .stat-card:nth-child(3) { animation-delay: .15s; }
+  .stat-card:nth-child(4) { animation-delay: .20s; }
+
+  .bottom-grid .card:nth-child(1) { animation-delay: .25s; }
+  .bottom-grid .card:nth-child(2) { animation-delay: .30s; }
+  .bottom-grid .card:nth-child(3) { animation-delay: .35s; }
+
+  /* ── Topbar hamburger (mobile) ── */
+  .menu-toggle {
+    display: none;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 4px;
+    color: var(--text-mid);
+  }
+
+  @media (max-width: 768px) {
+    .sidebar { position: fixed; left: -100%; top: 0; bottom: 0; z-index: 100; transition: left var(--transition); }
+    .sidebar.open { left: 0; }
+    .menu-toggle { display: flex; }
+    .bottom-grid { grid-template-columns: 1fr; }
+    .stats-grid { grid-template-columns: 1fr 1fr; }
+    .content { padding: 18px 16px 32px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <!-- ══════════ SIDEBAR ══════════ -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-brand">
+      <span class="brand-label">Admin</span>
+    </div>
+
+    <nav class="sidebar-nav">
+
+      <div class="nav-item active" onclick="setActive(this)">
+        <span class="nav-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+        </span>
+        Dashboard
+      </div>
+
+      <div class="nav-item" onclick="setActive(this)">
+        <span class="nav-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        </span>
+        Users
+        <span class="nav-badge badge-green">3</span>
+      </div>
+
+      <div class="nav-item" onclick="setActive(this)">
+        <span class="nav-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+        </span>
+        Appointments
+        <span class="nav-badge badge-gold">0</span>
+      </div>
+
+      <div class="nav-item" onclick="setActive(this)">
+        <span class="nav-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+        </span>
+        Blog Management
+      </div>
+
+      <div class="nav-item" onclick="setActive(this)">
+        <span class="nav-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+        </span>
+        Gallery
+      </div>
+
+      <div class="nav-item" onclick="setActive(this)">
+        <span class="nav-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>
+        </span>
+        Services
+      </div>
+
+      <div class="nav-item" onclick="setActive(this)">
+        <span class="nav-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        </span>
+        Messages
+        <span class="nav-badge badge-red">0</span>
+      </div>
+
+      <div class="nav-item" onclick="setActive(this)">
+        <span class="nav-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+        </span>
+        Newsletter
+      </div>
+
+      <div class="nav-item" onclick="setActive(this)">
+        <span class="nav-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+        </span>
+        Analytics
+      </div>
+
+      <div class="nav-item" onclick="setActive(this)">
+        <span class="nav-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+        </span>
+        Profile
+      </div>
+
+      <div class="nav-item" onclick="setActive(this)">
+        <span class="nav-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        </span>
+        Safe Space
+      </div>
+
+    </nav>
+
+    <div class="sidebar-footer">
+      <div class="view-site-link">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+        View Site
+      </div>
+    </div>
+  </aside>
+
+  <!-- ══════════ MAIN ══════════ -->
+  <div class="main">
+
+    <!-- Topbar -->
+    <header class="topbar">
+      <button class="menu-toggle" onclick="document.getElementById('sidebar').classList.toggle('open')">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+      </button>
+
+      <div class="topbar-logo">
+        <!-- Decorative SVG emblem -->
+        <div class="topbar-logo-img">
+          <svg viewBox="0 0 60 60" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="30" cy="30" r="28" fill="#2d7a52" opacity=".15"/>
+            <circle cx="30" cy="30" r="22" fill="none" stroke="#2d7a52" stroke-width="2"/>
+            <path d="M30 12 L34 24 L46 24 L37 32 L40 44 L30 36 L20 44 L23 32 L14 24 L26 24 Z" fill="#2d7a52" opacity=".7"/>
+          </svg>
+        </div>
+        <span class="topbar-title">Nuwo Ni Uwacu Hub</span>
+      </div>
+
+      <div class="topbar-spacer"></div>
+
+      <div class="topbar-user">
+        <div class="user-avatar">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+        </div>
+        <span class="user-name">manzi fredy</span>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--text-light)"><polyline points="6 9 12 15 18 9"/></svg>
+      </div>
+    </header>
+
+    <!-- Content -->
+    <main class="content">
+
+      <!-- Page header -->
+      <div class="page-header">
+        <h1 class="page-title">Dashboard Overview</h1>
+        <p class="page-subtitle">Welcome back, manzi fredy! Here's what's happening today.</p>
+      </div>
+
+      <!-- Stat cards -->
+      <div class="stats-grid">
+
+        <div class="stat-card">
+          <div class="stat-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          </div>
+          <div class="stat-body">
+            <div class="stat-value" id="stat-users">3</div>
+            <div class="stat-label">Total Users</div>
+          </div>
+        </div>
+
+        <div class="stat-card">
+          <div class="stat-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+          </div>
+          <div class="stat-body">
+            <div class="stat-value" id="stat-appts">0</div>
+            <div class="stat-label">Appointments</div>
+          </div>
+        </div>
+
+        <div class="stat-card">
+          <div class="stat-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          </div>
+          <div class="stat-body">
+            <div class="stat-value" id="stat-blogs">2</div>
+            <div class="stat-label">Blog Posts</div>
+          </div>
+        </div>
+
+        <div class="stat-card">
+          <div class="stat-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          </div>
+          <div class="stat-body">
+            <div class="stat-value" id="stat-msgs">0</div>
+            <div class="stat-label">Messages</div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Bottom grid -->
+      <div class="bottom-grid">
+
+        <!-- Chart card -->
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">Appointment Trends</span>
+            <div class="card-controls">
+              <button class="ctrl-btn">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+              </button>
+              <button class="ctrl-btn">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+              </button>
+            </div>
+          </div>
+          <div class="chart-wrap">
+            <canvas id="trendChart"></canvas>
+          </div>
+        </div>
+
+        <!-- Recent activities -->
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">Recent Activities</span>
+            <span class="card-action">View All</span>
+          </div>
+          <div class="activity-list">
+
+            <div class="activity-item">
+              <div class="act-icon">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+              </div>
+              <div class="act-body">
+                <div class="act-text">New user registered: John Doe</div>
+                <div class="act-time">2 hours ago</div>
+              </div>
+            </div>
+
+            <div class="activity-item">
+              <div class="act-icon">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+              </div>
+              <div class="act-body">
+                <div class="act-text">New appointment booked for Mental Health Counseling</div>
+                <div class="act-time">4 hours ago</div>
+              </div>
+            </div>
+
+            <div class="activity-item">
+              <div class="act-icon">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+              </div>
+              <div class="act-body">
+                <div class="act-text">New contact message received</div>
+                <div class="act-time">6 hours ago</div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- Quick actions -->
+        <div class="card quick-actions-card">
+          <div class="card-header">
+            <span class="card-title">Quick Actions</span>
+          </div>
+          <div class="qa-grid">
+
+            <button class="qa-btn">
+              <div class="qa-btn-icon">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              </div>
+              <span class="qa-btn-label">New Blog Post</span>
+            </button>
+
+            <button class="qa-btn">
+              <div class="qa-btn-icon">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+              </div>
+              <span class="qa-btn-label">Add Service</span>
+            </button>
+
+            <button class="qa-btn">
+              <div class="qa-btn-icon">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+              </div>
+              <span class="qa-btn-label">Upload Images</span>
+            </button>
+
+            <button class="qa-btn">
+              <div class="qa-btn-icon">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></svg>
+              </div>
+              <span class="qa-btn-label">Add User</span>
+            </button>
+
+          </div>
+        </div>
+
+      </div>
+    </main>
+  </div>
+</div>
+
+<!-- ══════════ CHART.JS ══════════ -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script>
+  /* ── Nav active ── */
+  function setActive(el) {
+    document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
+    el.classList.add('active');
+  }
+
+  /* ── Trend chart ── */
+  const ctx = document.getElementById('trendChart').getContext('2d');
+
+  const labels = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const data   = [14, 17, 18, 20, 19, 25, 22, 24, 21, 26, 28, 30];
+
+  const gradient = ctx.createLinearGradient(0, 0, 0, 180);
+  gradient.addColorStop(0,   'rgba(45,122,82,0.22)');
+  gradient.addColorStop(1,   'rgba(45,122,82,0.00)');
+
+  new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        data,
+        borderColor:     '#2d7a52',
+        borderWidth:     2.5,
+        backgroundColor: gradient,
+        pointBackgroundColor: '#2d7a52',
+        pointBorderColor:    '#fff',
+        pointBorderWidth:    2,
+        pointRadius:         4,
+        pointHoverRadius:    6,
+        tension:             0.4,
+        fill:                true,
+      }]
+    },
+    options: {
+      responsive:          true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: {
+        backgroundColor: '#1a5c3a',
+        titleColor:      '#fff',
+        bodyColor:       '#c8e6d2',
+        padding:         10,
+        cornerRadius:    8,
+        displayColors:   false,
+      }},
+      scales: {
+        x: {
+          grid: { display: false },
+          ticks: { color: '#8aa898', font: { size: 11, family: 'DM Sans' } },
+          border: { display: false },
+        },
+        y: {
+          grid: { color: '#eef5f1', drawTicks: false },
+          ticks: { color: '#8aa898', font: { size: 11, family: 'DM Sans' }, stepSize: 5, padding: 8 },
+          border: { display: false },
+          min: 10,
+        }
+      }
+    }
+  });
+
+  /* ── Animate stat counters ── */
+  function animateCount(el, target, duration = 900) {
+    const start = performance.now();
+    const update = (now) => {
+      const progress = Math.min((now - start) / duration, 1);
+      const ease = 1 - Math.pow(1 - progress, 3);
+      el.textContent = Math.round(ease * target);
+      if (progress < 1) requestAnimationFrame(update);
+    };
+    requestAnimationFrame(update);
+  }
+
+  window.addEventListener('load', () => {
+    animateCount(document.getElementById('stat-users'), 3);
+    animateCount(document.getElementById('stat-appts'), 0);
+    animateCount(document.getElementById('stat-blogs'), 2);
+    animateCount(document.getElementById('stat-msgs'),  0);
+  });
+</script>
+
+</body>
+</html>

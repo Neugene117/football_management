@@ -1,0 +1,394 @@
+﻿<?php
+require_once __DIR__ . '/../db.php';
+
+function e($value)
+{
+    return htmlspecialchars((string) $value, ENT_QUOTES, 'UTF-8');
+}
+
+function app_base()
+{
+    return defined('APP_BASE') ? APP_BASE : '';
+}
+
+function app_url($path)
+{
+    $path = (string) $path;
+    if ($path === '') {
+        return '';
+    }
+
+    if (preg_match('#^(https?:)?//#', $path) || str_starts_with($path, '/')) {
+        return $path;
+    }
+
+    return app_base() . ltrim($path, '/');
+}
+
+function set_flash($type, $message)
+{
+    $_SESSION['flash'][] = ['type' => $type, 'message' => $message];
+}
+
+function get_flashes()
+{
+    $messages = $_SESSION['flash'] ?? [];
+    unset($_SESSION['flash']);
+
+    return $messages;
+}
+
+function redirect_to($url)
+{
+    header('Location: ' . $url);
+    exit;
+}
+
+function current_user()
+{
+    return $_SESSION['user'] ?? null;
+}
+
+function is_logged_in()
+{
+    return !empty($_SESSION['user']);
+}
+
+function csrf_token()
+{
+    if (empty($_SESSION['csrf_token'])) {
+        $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+    }
+
+    return $_SESSION['csrf_token'];
+}
+
+function validate_csrf()
+{
+    $token = $_POST['csrf_token'] ?? '';
+    return !empty($_SESSION['csrf_token']) && hash_equals($_SESSION['csrf_token'], $token);
+}
+
+function old($key, $default = '')
+{
+    return $_POST[$key] ?? $default;
+}
+
+function upload_file($fieldName, $subDir = 'uploads', $allowed = ['jpg', 'jpeg', 'png', 'webp'])
+{
+    if (empty($_FILES[$fieldName]['name'])) {
+        return [true, null];
+    }
+
+    $file = $_FILES[$fieldName];
+    if ($file['error'] !== UPLOAD_ERR_OK) {
+        return [false, 'File upload failed.'];
+    }
+
+    $maxBytes = 2 * 1024 * 1024;
+    if ($file['size'] > $maxBytes) {
+        return [false, 'File is too large. Max 2MB.'];
+    }
+
+    $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+    if (!in_array($ext, $allowed, true)) {
+        return [false, 'Invalid file type.'];
+    }
+
+    $finfo = finfo_open(FILEINFO_MIME_TYPE);
+    $mime = finfo_file($finfo, $file['tmp_name']);
+    finfo_close($finfo);
+
+    $validMime = ['image/jpeg', 'image/png', 'image/webp'];
+    if (!in_array($mime, $validMime, true)) {
+        return [false, 'Only image uploads are allowed.'];
+    }
+
+    $folderPath = __DIR__ . '/../' . trim($subDir, '/');
+    if (!is_dir($folderPath)) {
+        mkdir($folderPath, 0777, true);
+    }
+
+    $newName = uniqid('img_', true) . '.' . $ext;
+    $destination = $folderPath . '/' . $newName;
+
+    if (!move_uploaded_file($file['tmp_name'], $destination)) {
+        return [false, 'Unable to save uploaded file.'];
+    }
+
+    return [true, trim($subDir, '/') . '/' . $newName];
+}
+
+function create_slug($text)
+{
+    $slug = strtolower(trim($text));
+    $slug = preg_replace('/[^a-z0-9]+/', '-', $slug);
+    return trim($slug, '-');
+}
+
+function page_param()
+{
+    return $_GET['page'] ?? 'dashboard';
+}
+
+function per_page()
+{
+    return 10;
+}
+
+function current_page_no()
+{
+    $p = (int) ($_GET['p'] ?? 1);
+    return $p > 0 ? $p : 1;
+}
+
+function paginate_clause(&$offset)
+{
+    $pageNo = current_page_no();
+    $limit = per_page();
+    $offset = ($pageNo - 1) * $limit;
+
+    return " LIMIT {$limit} OFFSET {$offset} ";
+}
+
+function status_badge($status)
+{
+    $map = [
+        'approved' => 'success',
+        'active' => 'success',
+        'submitted' => 'info',
+        'pending' => 'warning',
+        'draft' => 'muted',
+        'rejected' => 'danger',
+        'reject' => 'danger',
+        'inactive' => 'danger',
+        'suspended' => 'danger',
+        'completed' => 'success',
+        'scheduled' => 'info',
+    ];
+
+    $clean = strtolower((string) $status);
+    $class = $map[$clean] ?? 'muted';
+
+    return '<span class="badge badge-' . e($class) . '">' . e(ucfirst($clean)) . '</span>';
+}
+
+function log_action($action, $module, $targetType = null, $targetId = null, $oldValues = null, $newValues = null)
+{
+    $user = current_user();
+    $userId = $user['id'] ?? null;
+    $ip = $_SERVER['REMOTE_ADDR'] ?? null;
+    $agent = $_SERVER['HTTP_USER_AGENT'] ?? null;
+
+    db_execute(
+        'INSERT INTO activity_logs (user_id, action, module, target_type, target_id, old_values, new_values, ip_address, user_agent) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        'isssissss',
+        [
+            $userId,
+            $action,
+            $module,
+            $targetType,
+            $targetId,
+            $oldValues ? json_encode($oldValues) : null,
+            $newValues ? json_encode($newValues) : null,
+            $ip,
+            $agent,
+        ]
+    );
+}
+
+function ensure_default_roles()
+{
+    $defaultRoles = [
+        ['Federation Admin', 'federation-admin', 'federation', 'Full federation control'],
+        ['Team Manager', 'team-manager', 'club', 'Manage team operations'],
+        ['Coach', 'coach', 'club', 'Training and lineup access'],
+        ['Match Official', 'match-official', 'global', 'Manage officiating tasks'],
+        ['Analyst', 'analyst', 'club', 'Performance and ranking analysis'],
+        ['Media Officer', 'media-officer', 'federation', 'Manage news/publication'],
+    ];
+
+    foreach ($defaultRoles as $role) {
+        $existing = db_fetch_one('SELECT id FROM roles WHERE slug = ?', 's', [$role[1]]);
+        if (!$existing) {
+            db_execute('INSERT INTO roles (name, slug, scope, description) VALUES (?, ?, ?, ?)', 'ssss', $role);
+        }
+    }
+}
+
+function total_pages($totalItems)
+{
+    return max(1, (int) ceil($totalItems / per_page()));
+}
+
+function load_system_settings()
+{
+    $defaults = [
+        'system_name' => 'Football Federation Admin Dashboard',
+        'system_email' => 'federation@example.com',
+        'primary_color' => '#ff7a00',
+        'secondary_color' => '#0b1f3a',
+        'logo' => 'assets/images/federation-logo.svg',
+    ];
+
+    $file = __DIR__ . '/system_settings.json';
+    if (!file_exists($file)) {
+        file_put_contents($file, json_encode($defaults, JSON_PRETTY_PRINT));
+        return $defaults;
+    }
+
+    $raw = file_get_contents($file);
+    $json = json_decode((string) $raw, true);
+    if (!is_array($json)) {
+        return $defaults;
+    }
+
+    return array_merge($defaults, $json);
+}
+
+function save_system_settings($settings)
+{
+    $current = load_system_settings();
+    $merged = array_merge($current, $settings);
+    $file = __DIR__ . '/system_settings.json';
+
+    return file_put_contents($file, json_encode($merged, JSON_PRETTY_PRINT)) !== false;
+}
+
+function page_title($page)
+{
+    $titles = [
+        'dashboard' => 'Dashboard',
+        'teams' => 'Teams Management',
+        'team_registrations' => 'Team Registrations',
+        'users' => 'Users Management',
+        'roles_permissions' => 'Roles & Permissions',
+        'assign_roles' => 'Assign Roles',
+        'player_rankings_approval' => 'Player Rankings Approval',
+        'player_ratings_approval' => 'Player Ratings Approval',
+        'player_statistics_approval' => 'Player Statistics Approval',
+        'stadiums' => 'Stadium Management',
+        'seasons' => 'Seasons Management',
+        'match_results_approval' => 'Match Results Approval',
+        'match_officials' => 'Match Officials',
+        'match_lineups_approval' => 'Match Lineups Approval',
+        'news' => 'News Management',
+        'activity_logs' => 'Activity Logs',
+        'reports' => 'Reports',
+        'settings' => 'Settings',
+        'profile' => 'Profile',
+    ];
+
+    return $titles[$page] ?? 'Dashboard';
+}
+
+function icon_svg($name)
+{
+    $icons = [
+        'dashboard' => '<svg viewBox=\"0 0 24 24\"><path d=\"M3 13h8V3H3v10zm10 8h8V11h-8v10zM3 21h8v-6H3v6zm10-18v6h8V3h-8z\"/></svg>',
+        'team' => '<svg viewBox=\"0 0 24 24\"><path d=\"M12 2l9 4v6c0 5.5-3.8 10.7-9 12-5.2-1.3-9-6.5-9-12V6l9-4zm0 5a2 2 0 100 4 2 2 0 000-4zm-4.2 9.5h8.4c-.4-1.8-1.9-3-4.2-3s-3.8 1.2-4.2 3z\"/></svg>',
+        'users' => '<svg viewBox=\"0 0 24 24\"><path d=\"M16 11c1.7 0 3-1.6 3-3.5S17.7 4 16 4s-3 1.6-3 3.5 1.3 3.5 3 3.5zM8 11c1.7 0 3-1.6 3-3.5S9.7 4 8 4 5 5.6 5 7.5 6.3 11 8 11zm0 2c-2.7 0-8 1.4-8 4v3h16v-3c0-2.6-5.3-4-8-4zm8 0c-.3 0-.7 0-1 .1 1.3.9 2 2.1 2 3.4v3h7v-3c0-2.6-5.3-4-8-4z\"/></svg>',
+        'approval' => '<svg viewBox=\"0 0 24 24\"><path d=\"M12 2l7 3v6c0 5-3.2 9.7-7 11-3.8-1.3-7-6-7-11V5l7-3zm-1 12l5-5-1.4-1.4-3.6 3.6-1.6-1.6L8 11l3 3z\"/></svg>',
+        'stadium' => '<svg viewBox=\"0 0 24 24\"><path d=\"M3 18h18v2H3v-2zm2-2V8l7-3 7 3v8h-2V9.3l-5-2.1-5 2.1V16H5z\"/></svg>',
+        'season' => '<svg viewBox=\"0 0 24 24\"><path d=\"M7 2h2v2h6V2h2v2h3v18H4V4h3V2zm12 8H5v10h14V10z\"/></svg>',
+        'news' => '<svg viewBox=\"0 0 24 24\"><path d=\"M4 4h16v16H4V4zm3 3v2h10V7H7zm0 4v2h10v-2H7zm0 4v2h7v-2H7z\"/></svg>',
+        'logs' => '<svg viewBox=\"0 0 24 24\"><path d=\"M4 4h16v16H4V4zm2 2v12h12V6H6zm2 2h8v2H8V8zm0 4h8v2H8v-2z\"/></svg>',
+        'report' => '<svg viewBox=\"0 0 24 24\"><path d=\"M5 3h14v18H5V3zm3 4v10h2V7H8zm4 3v7h2v-7h-2zm4-2v9h2V8h-2z\"/></svg>',
+        'settings' => '<svg viewBox=\"0 0 24 24\"><path d=\"M19.4 13a7.7 7.7 0 000-2l2-1.6-2-3.4-2.4 1a8.8 8.8 0 00-1.7-1L15 2h-4l-.4 3a8.8 8.8 0 00-1.7 1l-2.4-1-2 3.4 2 1.6a7.7 7.7 0 000 2l-2 1.6 2 3.4 2.4-1c.5.4 1.1.8 1.7 1l.4 3h4l.4-3c.6-.2 1.2-.6 1.7-1l2.4 1 2-3.4-2-1.6zM12 15.5A3.5 3.5 0 1112 8a3.5 3.5 0 010 7.5z\"/></svg>',
+        'profile' => '<svg viewBox=\"0 0 24 24\"><path d=\"M12 12a5 5 0 100-10 5 5 0 000 10zm0 2c-4.4 0-8 2.2-8 5v3h16v-3c0-2.8-3.6-5-8-5z\"/></svg>',
+        'logout' => '<svg viewBox=\"0 0 24 24\"><path d=\"M10 17l1.4-1.4L9.8 14H20v-2H9.8l1.6-1.6L10 9l-4 4 4 4zm-6 4h8v-2H4V5h8V3H4a2 2 0 00-2 2v14a2 2 0 002 2z\"/></svg>',
+        'notification' => '<svg viewBox=\"0 0 24 24\"><path d=\"M12 22a2.5 2.5 0 002.5-2.5h-5A2.5 2.5 0 0012 22zm8-6V11a8 8 0 10-16 0v5L2 18v1h20v-1l-2-2z\"/></svg>',
+        'search' => '<svg viewBox=\"0 0 24 24\"><path d=\"M10 2a8 8 0 015.3 14l4.3 4.3-1.4 1.4-4.3-4.3A8 8 0 1110 2zm0 2a6 6 0 100 12 6 6 0 000-12z\"/></svg>',
+        'add' => '<svg viewBox=\"0 0 24 24\"><path d=\"M19 11h-6V5h-2v6H5v2h6v6h2v-6h6v-2z\"/></svg>',
+    ];
+
+    return $icons[$name] ?? $icons['dashboard'];
+}
+
+function render_pagination($totalItems)
+{
+    $totalPages = total_pages($totalItems);
+    $current = current_page_no();
+    if ($totalPages <= 1) {
+        return;
+    }
+
+    echo '<div class="pagination">';
+    for ($i = 1; $i <= $totalPages; $i++) {
+        $active = $i === $current ? 'active' : '';
+        $query = $_GET;
+        $query['p'] = $i;
+        $url = '?' . http_build_query($query);
+        echo '<a class="page-link ' . $active . '" href="' . e($url) . '">' . $i . '</a>';
+    }
+    echo '</div>';
+}
+
+function get_default_federation_id()
+{
+    $row = db_fetch_one('SELECT id FROM federations ORDER BY id ASC LIMIT 1');
+    if ($row) {
+        return (int) $row['id'];
+    }
+
+    db_execute(
+        'INSERT INTO federations (name, slug, country, is_active) VALUES (?, ?, ?, 1)',
+        'sss',
+        ['Rwanda Football Federation', 'rwanda-football-federation', 'Rwanda']
+    );
+
+    return (int) db_last_id();
+}
+
+function get_default_season_id()
+{
+    $row = db_fetch_one('SELECT id FROM seasons ORDER BY id DESC LIMIT 1');
+    if ($row) {
+        return (int) $row['id'];
+    }
+
+    db_execute(
+        'INSERT INTO seasons (name, start_date, end_date, is_active) VALUES (?, ?, ?, 1)',
+        'sss',
+        ['2026/2027', date('Y-m-d'), date('Y-m-d', strtotime('+10 months'))]
+    );
+
+    return (int) db_last_id();
+}
+
+function get_default_competition_id()
+{
+    $row = db_fetch_one('SELECT id FROM competitions ORDER BY id ASC LIMIT 1');
+    if ($row) {
+        return (int) $row['id'];
+    }
+
+    $federationId = get_default_federation_id();
+    $seasonId = get_default_season_id();
+    db_execute(
+        'INSERT INTO competitions (federation_id, season_id, name, slug, type, is_active) VALUES (?, ?, ?, ?, ?, 1)',
+        'iisss',
+        [$federationId, $seasonId, 'National League', 'national-league', 'league']
+    );
+
+    return (int) db_last_id();
+}
+
+function set_status_value($table, $id, $valueType = 'approved')
+{
+    $tableSafe = preg_replace('/[^a-zA-Z0-9_]/', '', $table);
+    $statusCol = pick_status_column($tableSafe);
+    if (!$statusCol || $id <= 0) {
+        return false;
+    }
+
+    if ($valueType === 'rejected') {
+        $sql = "UPDATE `{$tableSafe}` SET `{$statusCol}` = 3 WHERE id = ?";
+        return db_execute($sql, 'i', [$id]);
+    }
+
+    $value = $valueType === 'pending' ? 'pending' : 'approved';
+    $sql = "UPDATE `{$tableSafe}` SET `{$statusCol}` = ? WHERE id = ?";
+    return db_execute($sql, 'si', [$value, $id]);
+}
+
