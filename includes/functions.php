@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 require_once __DIR__ . '/../db.php';
 
 function e($value)
@@ -175,26 +175,30 @@ function status_badge($status)
 
 function log_action($action, $module, $targetType = null, $targetId = null, $oldValues = null, $newValues = null)
 {
-    $user = current_user();
-    $userId = $user['id'] ?? null;
-    $ip = $_SERVER['REMOTE_ADDR'] ?? null;
-    $agent = $_SERVER['HTTP_USER_AGENT'] ?? null;
+    try {
+        $user = current_user();
+        $userId = $user['id'] ?? null;
+        $ip = $_SERVER['REMOTE_ADDR'] ?? null;
+        $agent = $_SERVER['HTTP_USER_AGENT'] ?? null;
 
-    db_execute(
-        'INSERT INTO activity_logs (user_id, action, module, target_type, target_id, old_values, new_values, ip_address, user_agent) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-        'isssissss',
-        [
-            $userId,
-            $action,
-            $module,
-            $targetType,
-            $targetId,
-            $oldValues ? json_encode($oldValues) : null,
-            $newValues ? json_encode($newValues) : null,
-            $ip,
-            $agent,
-        ]
-    );
+        db_execute(
+            'INSERT INTO activity_logs (user_id, action, module, target_type, target_id, old_values, new_values, ip_address, user_agent) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            'issssssss',
+            [
+                (int) ($userId ?? 0),
+                (string) $action,
+                (string) $module,
+                $targetType !== null ? (string) $targetType : null,
+                $targetId !== null ? (string) $targetId : null,
+                $oldValues ? json_encode($oldValues) : null,
+                $newValues ? json_encode($newValues) : null,
+                $ip,
+                $agent,
+            ]
+        );
+    } catch (\Throwable $e) {
+        // Logging should never block the main operation
+    }
 }
 
 function ensure_default_roles()
@@ -400,4 +404,33 @@ function set_status_value($table, $id, $valueType = 'approved')
     $sql = "UPDATE `{$tableSafe}` SET `{$statusCol}` = ? WHERE id = ?";
     return db_execute($sql, 'si', [$value, $id]);
 }
+
+if (!function_exists('notif_time_ago')) {
+    function notif_time_ago($datetime)
+    {
+        $timestamp = strtotime((string) $datetime);
+        if (!$timestamp) {
+            return 'Just now';
+        }
+
+        $diff = max(1, time() - $timestamp);
+        if ($diff < 60) {
+            return 'Just now';
+        }
+        if ($diff < 3600) {
+            $mins = (int) floor($diff / 60);
+            return $mins . 'm ago';
+        }
+        if ($diff < 86400) {
+            $hours = (int) floor($diff / 3600);
+            return $hours . 'h ago';
+        }
+        $days = (int) floor($diff / 86400);
+        if ($days < 7) {
+            return $days . 'd ago';
+        }
+        return date('M d', $timestamp);
+    }
+}
+
 

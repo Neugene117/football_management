@@ -1,7 +1,8 @@
-﻿<?php
+<?php
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
+ob_start();
 
 date_default_timezone_set('Africa/Johannesburg');
 

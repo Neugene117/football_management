@@ -19,6 +19,8 @@ $groups = [
         'items' => [
             ['users', 'Users', 'fa-users', $userCount > 0 ? $userCount : null],
             ['match_officials', 'Officials', 'fa-user-shield', null],
+            ['roles_permissions', 'Roles & Permissions', 'fa-key', null],
+            ['assign_roles', 'Assign Roles', 'fa-user-tag', null],
         ],
     ],
     [
@@ -42,23 +44,34 @@ $groups = [
         'title' => 'Player Approvals',
         'icon' => 'fa-user-check',
         'items' => [
-            ['player_rankings_approval', 'Ranking Approvals', 'fa-list-ol', $pendingApprovals > 0 ? $pendingApprovals : null],
-            ['player_ratings_approval', 'Rating Approvals', 'fa-star-half-stroke', null],
-            ['player_statistics_approval', 'Statistics Approvals', 'fa-chart-line', null],
+            ['player_rankings_approval', 'Rankings', 'fa-list-ol', $pendingApprovals > 0 ? $pendingApprovals : null],
+            ['player_ratings_approval', 'Ratings', 'fa-star-half-stroke', null],
+            ['player_statistics_approval', 'Statistics', 'fa-chart-line', null],
         ],
     ],
     [
         'title' => 'Match Approvals',
         'icon' => 'fa-list-check',
         'items' => [
-            ['match_results_approval', 'Result Approvals', 'fa-flag-checkered', null],
-            ['match_lineups_approval', 'Lineup Approvals', 'fa-clipboard-list', null],
+            ['match_results_approval', 'Results', 'fa-flag-checkered', null],
+            ['match_lineups_approval', 'Lineups', 'fa-clipboard-list', null],
         ],
     ],
 ];
 ?>
 <aside class="sidebar" id="sidebar">
-    <div class="sidebar-title-block">Admin</div>
+    <div class="sidebar-brand-block">
+        <div class="sidebar-logo">
+            <img src="<?= e(app_url($settings['logo'] ?? 'assets/images/federation-logo.svg')); ?>" alt="logo">
+        </div>
+        <div class="sidebar-brand-info">
+            <span class="sidebar-brand-name"><?= e($settings['system_name'] ?? 'Federation'); ?></span>
+            <span class="sidebar-brand-role">Admin Panel</span>
+        </div>
+        <button class="sidebar-close-btn" id="sidebarClose" type="button" aria-label="Close sidebar">
+            <i class="fa-solid fa-xmark"></i>
+        </button>
+    </div>
 
     <nav class="sidebar-nav sidebar-group-nav">
         <?php foreach ($groups as $group):
@@ -91,4 +104,19 @@ $groups = [
         <?php endforeach; ?>
     </nav>
 
+    <div class="sidebar-foot">
+        <a class="nav-item <?= $current === 'profile' ? 'active' : ''; ?>" href="index.php?page=profile">
+            <i class="fa-solid fa-circle-user nav-fa" aria-hidden="true"></i>
+            <span>Profile</span>
+        </a>
+        <a class="nav-item <?= $current === 'settings' ? 'active' : ''; ?>" href="index.php?page=settings">
+            <i class="fa-solid fa-gear nav-fa" aria-hidden="true"></i>
+            <span>Settings</span>
+        </a>
+        <a class="nav-item nav-item-logout" href="logout.php">
+            <i class="fa-solid fa-right-from-bracket nav-fa" aria-hidden="true"></i>
+            <span>Logout</span>
+        </a>
+    </div>
 </aside>
+<div class="mobile-overlay" id="mobileOverlay"></div>
