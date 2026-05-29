@@ -732,6 +732,8 @@ function page_permission_slug($page)
         'activity_logs' => 'activity_logs.view',
         'reports' => 'reports.view',
         'settings' => 'settings.manage',
+        'match_scheduling' => 'matches.schedule',
+        'competitions' => 'competitions.manage',
 
         // Team Portal Page Mappings
         'squad' => 'players.view',
@@ -818,6 +820,8 @@ function page_title($page)
         'reports' => 'Reports',
         'settings' => 'Settings',
         'profile' => 'Profile',
+        'match_scheduling' => 'Match Scheduling',
+        'competitions' => 'Competitions Management',
     ];
 
     return $titles[$page] ?? 'Dashboard';
@@ -967,6 +971,168 @@ if (!function_exists('notif_time_ago')) {
             return $days . 'd ago';
         }
         return date('M d', $timestamp);
+    }
+}
+
+function ensure_sample_data() {
+    // 1. Check if we already have teams
+    $teamCount = db_table_count('teams');
+    if ($teamCount > 0) {
+        return; // Already seeded
+    }
+
+    // 2. Seed Stadiums
+    $stadiums = [
+        ['Amahoro National Stadium', 'Kigali', 'Rwanda', 45000, 'Remera, Kigali'],
+        ['Kigali Pelé Stadium', 'Kigali', 'Rwanda', 22000, 'Nyamirambo, Kigali'],
+        ['Musanze Stadium', 'Musanze', 'Rwanda', 12000, 'Musanze Town'],
+        ['Rubavu Stadium', 'Rubavu', 'Rwanda', 15000, 'Gisenyi, Rubavu']
+    ];
+    foreach ($stadiums as $s) {
+        db_execute('INSERT INTO stadiums (name, city, country, capacity, address) VALUES (?, ?, ?, ?, ?)', 'sssis', $s);
+    }
+
+    // Get Stadium IDs
+    $stadRows = db_fetch_all('SELECT id, name FROM stadiums');
+    $stadMap = [];
+    foreach ($stadRows as $row) {
+        $stadMap[$row['name']] = (int) $row['id'];
+    }
+
+    $fedId = get_default_federation_id();
+    $seasonId = get_default_season_id();
+    $compId = get_default_competition_id();
+
+    // 3. Seed Teams
+    $teamsData = [
+        ['Rayon Sports', 'rayon-sports', 'RS', 'https://images.unsplash.com/photo-1551958219-acbc595d9e15?w=80&q=80', 'Kigali', 'Amahoro National Stadium', 1968, 'Christian Harrington'],
+        ['APR FC', 'apr-fc', 'APR', 'https://images.unsplash.com/photo-1587329310690-91114ac008f0?w=80&q=80', 'Kigali', 'Kigali Pelé Stadium', 1993, 'Darko Novic'],
+        ['Kiyovu SC', 'kiyovu-sc', 'KSC', 'https://images.unsplash.com/photo-1508098682722-e99c43a406b2?w=80&q=80', 'Kigali', 'Kigali Pelé Stadium', 1964, 'Alain Landeut'],
+        ['Police FC', 'police-fc', 'PFC', 'https://images.unsplash.com/photo-1606925797300-0b35e9d1794e?w=80&q=80', 'Kigali', 'Kigali Pelé Stadium', 2003, 'Vincent Mashami'],
+        ['AS Kigali', 'as-kigali', 'ASK', 'https://images.unsplash.com/photo-1560272564-c83b66b1ad12?w=80&q=80', 'Kigali', 'Kigali Pelé Stadium', 1999, 'Eric Nshimiyimana'],
+        ['Musanze FC', 'musanze-fc', 'MFC', 'https://images.unsplash.com/photo-1543326727-cf6c39e8f84c?w=80&q=80', 'Musanze', 'Musanze Stadium', 1989, 'Sosthene Habimana'],
+        ['Etincelles FC', 'etincelles-fc', 'EFC', 'https://images.unsplash.com/photo-1519766304817-4f37bda74a26?w=80&q=80', 'Rubavu', 'Rubavu Stadium', 1972, 'Radjab Abdul'],
+        ['Gorilla FC', 'gorilla-fc', 'GFC', 'https://images.unsplash.com/photo-1574629810360-7efbbe195018?w=80&q=80', 'Rubavu', 'Rubavu Stadium', 2012, 'Musa Gatera']
+    ];
+
+    foreach ($teamsData as $t) {
+        $stadiumId = $stadMap[$t[5]] ?? null;
+        db_execute(
+            'INSERT INTO teams (federation_id, home_stadium_id, name, slug, short_name, logo, city, country, founded_year, coach_name, is_active, activated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NOW())',
+            'iissssssis',
+            [$fedId, $stadiumId, $t[0], $t[1], $t[2], $t[3], $t[4], 'Rwanda', $t[6], $t[7]]
+        );
+        $teamId = db_last_id();
+
+        // Enroll team in competition
+        db_execute('INSERT INTO competition_teams (competition_id, team_id) VALUES (?, ?)', 'ii', [$compId, $teamId]);
+    }
+
+    // Get Team IDs
+    $teamRows = db_fetch_all('SELECT id, name FROM teams');
+    $teamMap = [];
+    foreach ($teamRows as $row) {
+        $teamMap[$row['name']] = (int) $row['id'];
+    }
+
+    // 4. Seed Standings
+    $standingsData = [
+        ['Rayon Sports', 1, 22, 14, 5, 3, 34, 15, 47],
+        ['APR FC', 2, 22, 13, 3, 6, 29, 15, 42],
+        ['Kiyovu SC', 3, 22, 11, 5, 6, 25, 16, 38],
+        ['Police FC', 4, 22, 10, 6, 6, 22, 16, 36],
+        ['AS Kigali', 5, 22, 9, 7, 6, 18, 14, 34],
+        ['Musanze FC', 6, 22, 8, 5, 9, 16, 18, 29],
+        ['Etincelles FC', 7, 22, 6, 7, 9, 14, 20, 25],
+        ['Gorilla FC', 8, 22, 4, 6, 12, 12, 26, 18]
+    ];
+    foreach ($standingsData as $st) {
+        $teamId = $teamMap[$st[0]] ?? null;
+        if ($teamId) {
+            db_execute(
+                'INSERT INTO team_standings (team_id, competition_id, position, matches_played, wins, draws, losses, goals_for, goals_against, goal_difference, points) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                'iiiiiiiiiii',
+                [$teamId, $compId, $st[1], $st[2], $st[3], $st[4], $st[5], $st[6], $st[7], $st[6] - $st[7], $st[8]]
+            );
+        }
+    }
+
+    // 5. Seed Players
+    $playersData = [
+        ['APR FC', 'Eusebe', 'Nshuti', 1, 'goalkeeper', 'https://images.unsplash.com/photo-1627483297886-49710ae1fc22?w=100&q=80', 94],
+        ['APR FC', 'Jean', 'Ndayishimiye', 9, 'forward', 'https://images.unsplash.com/photo-1459865264687-595d652de67e?w=100&q=80', 91],
+        ['APR FC', 'Patrick', 'Habimana', 10, 'midfielder', 'https://images.unsplash.com/photo-1606925797300-0b35e9d1794e?w=100&q=80', 89],
+        ['APR FC', 'Michel', 'Hakizimana', 5, 'defender', 'https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?w=100&q=80', 87],
+        ['Rayon Sports', 'Cedric', 'Munyaneza', 11, 'forward', 'https://images.unsplash.com/photo-1543326727-cf6c39e8f84c?w=100&q=80', 86],
+        ['Kiyovu SC', 'Blaise', 'Niyibizi', 8, 'midfielder', 'https://images.unsplash.com/photo-1508098682722-e99c43a406b2?w=100&q=80', 84]
+    ];
+    foreach ($playersData as $pl) {
+        $teamId = $teamMap[$pl[0]] ?? null;
+        if ($teamId) {
+            db_execute(
+                'INSERT INTO players (team_id, first_name, last_name, jersey_number, position, photo_pl, contract_start, contract_end, status) VALUES (?, ?, ?, ?, ?, ?, NOW(), DATE_ADD(NOW(), INTERVAL 2 YEAR), "active")',
+                'ississ',
+                [$teamId, $pl[1], $pl[2], $pl[3], $pl[4], $pl[5]]
+            );
+            $playerId = db_last_id();
+
+            // Seed Rating / Statistics for rankings
+            db_execute(
+                'INSERT INTO player_statistics (player_id, competition_id, matches_played, goals, assists, average_rating, statuss) VALUES (?, ?, 22, ?, ?, ?, "approved")',
+                'iiidi',
+                [$playerId, $compId, $pl[4] === 'forward' ? 14 : 2, $pl[4] === 'forward' ? 5 : 8, $pl[6]]
+            );
+        }
+    }
+
+    // 6. Seed Matches
+    $matchesData = [
+        ['Rayon Sports', 'APR FC', 'Amahoro National Stadium', '2026-05-30', '15:00:00', 22, 'Regular Season', 'in_progress'],
+        ['Kiyovu SC', 'Police FC', 'Kigali Pelé Stadium', '2026-05-31', '15:00:00', 23, 'Regular Season', 'scheduled'],
+        ['AS Kigali', 'Musanze FC', 'Musanze Stadium', '2026-05-28', '15:00:00', 21, 'Regular Season', 'completed']
+    ];
+    foreach ($matchesData as $m) {
+        $homeId = $teamMap[$m[0]] ?? null;
+        $awayId = $teamMap[$m[1]] ?? null;
+        $stadiumId = $stadMap[$m[2]] ?? null;
+        if ($homeId && $awayId) {
+            db_execute(
+                'INSERT INTO matches (federation_id, competition_id, home_team_id, away_team_id, stadium_id, match_date, match_time, matchday, round, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                'iiiiississ',
+                [$fedId, $compId, $homeId, $awayId, $stadiumId, $m[3], $m[4], $m[5], $m[6], $m[7]]
+            );
+            $matchId = db_last_id();
+
+            if ($m[7] === 'completed') {
+                db_execute(
+                    'INSERT INTO match_results (match_id, home_score, away_score, status) VALUES (?, 0, 0, "approved")',
+                    'i',
+                    [$matchId]
+                );
+            } elseif ($m[7] === 'in_progress') {
+                // Insert a temporary result for display
+                db_execute(
+                    'INSERT INTO match_results (match_id, home_score, away_score, status) VALUES (?, 2, 1, "approved")',
+                    'i',
+                    [$matchId]
+                );
+            }
+        }
+    }
+
+    // 7. Seed News
+    $newsData = [
+        ['Federation confirms 16 teams registered for 2026/27 Rwanda Premier League season', 'federation-confirms-16-teams', 'The official federation has approved all 16 premier league teams following full documentation reviews. Regular updates will follow.', 'https://images.unsplash.com/photo-1522778119026-d647f0596c20?w=700&q=80'],
+        ['APR FC lineup confirmed for clash vs Police FC', 'apr-fc-lineup-confirmed', 'Tactics and starting squads have been submitted by the coach Vincent Mashami.', 'https://images.unsplash.com/photo-1574629810360-7efbbe195018?w=150&q=70'],
+        ['Rayon Sports extend lead with 2–1 victory over Musanze', 'rayon-sports-extend-lead', 'An amazing header in the 88th minute secured Rayon Sports three crucial points.', 'https://images.unsplash.com/photo-1519766304817-4f37bda74a26?w=150&q=70'],
+        ['Nshuti rated top GK with 94/100 season average', 'nshuti-rated-top-gk', 'With 12 clean sheets, Eusebe Nshuti holds the best average score this season.', 'https://images.unsplash.com/photo-1627483297886-49710ae1fc22?w=150&q=70']
+    ];
+    foreach ($newsData as $n) {
+        db_execute(
+            'INSERT INTO news (author_id, title, slug, content, cover_image, is_published, published_at) VALUES (1, ?, ?, ?, ?, 1, NOW())',
+            'ssss',
+            $n
+        );
     }
 }
 

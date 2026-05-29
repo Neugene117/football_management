@@ -2,49 +2,1252 @@
 session_start();
 define('APP_BASE', '');
 require_once __DIR__ . '/includes/functions.php';
+
+// Guarantee that sample data exists if this is a fresh database
+ensure_sample_data();
+
 $settings = load_system_settings();
+
+// 1. Fetch Ticker Matches
+$tickerMatches = db_fetch_all("
+    SELECT m.*, ht.name AS home_name, at.name AS away_name, mr.home_score, mr.away_score
+    FROM matches m
+    INNER JOIN teams ht ON ht.id = m.home_team_id
+    INNER JOIN teams at ON at.id = m.away_team_id
+    LEFT JOIN match_results mr ON mr.match_id = m.id AND mr.status = 'approved'
+    ORDER BY m.match_date DESC, m.match_time DESC LIMIT 6
+");
+
+// 2. Fetch Hero counts
+$totalTeams = db_table_count('teams');
+$totalPlayers = db_table_count('players');
+$totalMatches = db_table_count('matches');
+$totalMatchdays = (int) (db_fetch_one("SELECT COUNT(DISTINCT matchday) AS total FROM matches")['total'] ?? 0);
+
+// 3. Fetch Stats row counts
+$activeTeams = db_table_count('teams', 'is_active = 1');
+$scheduledMatches = db_table_count('matches', "status = 'scheduled'");
+$liveMatches = db_table_count('matches', "status = 'in_progress'");
+$seasonGoals = (int) (db_fetch_one("SELECT SUM(home_score + away_score) AS total FROM match_results WHERE status = 'approved'")['total'] ?? 0);
+if ($seasonGoals <= 0) {
+    $seasonGoals = 48; // Fallback default
+}
+
+// 4. Fetch Featured Match Banner (priority: live, then upcoming/most recent)
+$featuredMatch = db_fetch_one("
+    SELECT m.*, ht.name AS home_name, ht.logo AS home_logo, at.name AS away_name, at.logo AS away_logo, mr.home_score, mr.away_score, s.name AS stadium_name
+    FROM matches m
+    INNER JOIN teams ht ON ht.id = m.home_team_id
+    INNER JOIN teams at ON at.id = m.away_team_id
+    LEFT JOIN match_results mr ON mr.match_id = m.id AND mr.status = 'approved'
+    LEFT JOIN stadiums s ON s.id = m.stadium_id
+    ORDER BY (m.status = 'in_progress') DESC, m.match_date DESC, m.match_time DESC LIMIT 1
+");
+
+// 5. Fetch Upcoming & Live Matches List
+$matchdayMatches = db_fetch_all("
+    SELECT m.*, ht.name AS home_name, ht.logo AS home_logo, at.name AS away_name, at.logo AS away_logo, mr.home_score, mr.away_score, s.name AS stadium_name
+    FROM matches m
+    INNER JOIN teams ht ON ht.id = m.home_team_id
+    INNER JOIN teams at ON at.id = m.away_team_id
+    LEFT JOIN match_results mr ON mr.match_id = m.id AND mr.status = 'approved'
+    LEFT JOIN stadiums s ON s.id = m.stadium_id
+    ORDER BY (m.status = 'in_progress') DESC, m.match_date DESC, m.match_time DESC LIMIT 3
+");
+
+// 6. Fetch League Standings
+$standings = db_fetch_all("
+    SELECT ts.*, t.name AS team_name, t.logo AS team_logo
+    FROM team_standings ts
+    INNER JOIN teams t ON t.id = ts.team_id
+    ORDER BY ts.points DESC, ts.goal_difference DESC, ts.goals_for DESC LIMIT 6
+");
+
+// 7. Fetch Registered Teams
+$registeredTeams = db_fetch_all("
+    SELECT t.*, s.name AS stadium_name
+    FROM teams t
+    LEFT JOIN stadiums s ON s.id = t.home_stadium_id
+    ORDER BY t.is_active DESC, t.created_at ASC LIMIT 8
+");
+
+// 8. Fetch Top Rated Players
+$topPlayers = db_fetch_all("
+    SELECT p.*, t.name AS team_name, ps.average_rating
+    FROM players p
+    INNER JOIN teams t ON t.id = p.team_id
+    INNER JOIN player_statistics ps ON ps.player_id = p.id
+    ORDER BY ps.average_rating DESC LIMIT 6
+");
+
+// 9. Fetch News
+$allNews = db_fetch_all("
+    SELECT * FROM news WHERE is_published = 1 ORDER BY published_at DESC LIMIT 5
+");
+$mainNews = $allNews[0] ?? null;
+$subNews = array_slice($allNews, 1);
+
+// 10. Fetch Pitch Lineup Data (APR FC & Police FC rosters)
+$aprRow = db_fetch_one("SELECT id, logo FROM teams WHERE name = 'APR FC'");
+$aprId = $aprRow ? (int) $aprRow['id'] : 0;
+$aprDbPlayers = [];
+if ($aprId > 0) {
+    $aprDbPlayers = db_fetch_all("
+        SELECT p.first_name, p.last_name, p.jersey_number, p.position, p.photo_pl 
+        FROM players p 
+        WHERE p.team_id = ? 
+        ORDER BY FIELD(p.position, 'goalkeeper', 'defender', 'midfielder', 'forward') ASC 
+        LIMIT 11
+    ", 'i', [$aprId]);
+}
+
+$policeRow = db_fetch_one("SELECT id, logo FROM teams WHERE name = 'Police FC'");
+$policeId = $policeRow ? (int) $policeRow['id'] : 0;
+$policeDbPlayers = [];
+if ($policeId > 0) {
+    $policeDbPlayers = db_fetch_all("
+        SELECT p.first_name, p.last_name, p.jersey_number, p.position, p.photo_pl 
+        FROM players p 
+        WHERE p.team_id = ? 
+        ORDER BY FIELD(p.position, 'goalkeeper', 'defender', 'midfielder', 'forward') ASC 
+        LIMIT 11
+    ", 'i', [$policeId]);
+}
+
+// Map position strings to abbreviated positions
+function mapPositionAbbrev($pos) {
+    $map = [
+        'goalkeeper' => 'GK',
+        'defender' => 'CB',
+        'midfielder' => 'CM',
+        'forward' => 'ST'
+    ];
+    return $map[strtolower($pos)] ?? 'CM';
+}
+
+function mapPositionType($pos) {
+    $map = [
+        'goalkeeper' => 'gk',
+        'defender' => 'def',
+        'midfielder' => 'mid',
+        'forward' => 'fwd'
+    ];
+    return $map[strtolower($pos)] ?? 'mid';
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title><?= e($settings['system_name']); ?> - Home</title>
-  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="assets/css/style.css">
+  <title>Rwanda Football Federation Management System</title>
+  <style>
+  @import url('https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700;800;900&family=Barlow+Condensed:wght@500;600;700;800;900&display=swap');
+  *{box-sizing:border-box;margin:0;padding:0}
+  :root{
+    --org:#F97316;--org-d:#EA580C;--org-l:#FED7AA;--org-xl:#FFF7ED;
+    --navy:#0F1F4B;--navy-m:#1E3A8A;
+    --white:#fff;--off:#F8FAFC;--gray:#64748B;--gray-l:#E2E8F0;--gray-ll:#F1F5F9;
+    --text:#0F172A;--text2:#475569;--text3:#94A3B8;
+    --r:6px;--rm:10px;--rl:16px;
+  }
+  body{font-family:'Barlow',sans-serif;background:#fff;color:var(--text);overflow-x:hidden;font-size:14px;line-height:1.5}
+  img{display:block}
+
+  /* NAV */
+  nav{background:var(--navy);padding:0 20px;display:flex;align-items:center;justify-content:space-between;height:52px;position:sticky;top:0;z-index:100;border-bottom:2px solid var(--org)}
+  .nav-logo{display:flex;align-items:center;gap:8px;text-decoration:none}
+  .logo-ball{width:30px;height:30px}
+  .logo-text{font-family:'Barlow Condensed',sans-serif;font-size:16px;font-weight:800;color:#fff;letter-spacing:.3px;line-height:1.1}
+  .logo-text span{color:var(--org)}
+  .nav-links{display:flex;align-items:center;gap:0}
+  .nav-links a{color:rgba(255,255,255,.7);text-decoration:none;font-size:12px;font-weight:600;padding:5px 9px;border-radius:var(--r);transition:.18s;letter-spacing:.2px}
+  .nav-links a:hover,.nav-links a.active{color:var(--org)}
+  .nav-right{display:flex;align-items:center;gap:7px}
+  .btn-ln{background:transparent;border:1px solid rgba(255,255,255,.25);color:#fff;padding:5px 12px;border-radius:var(--r);font-size:11px;font-weight:600;cursor:pointer;transition:.18s;font-family:'Barlow',sans-serif}
+  .btn-ln:hover{border-color:var(--org);color:var(--org)}
+  .btn-rg{background:var(--org);border:none;color:#fff;padding:5px 12px;border-radius:var(--r);font-size:11px;font-weight:700;cursor:pointer;font-family:'Barlow',sans-serif;transition:.18s}
+  .btn-rg:hover{background:var(--org-d)}
+
+  /* TICKER */
+  .ticker{background:var(--org);padding:5px 0;overflow:hidden;display:flex;align-items:center}
+  .ticker-lbl{background:var(--navy);color:#fff;font-size:10px;font-weight:800;padding:2px 12px;white-space:nowrap;letter-spacing:.5px;text-transform:uppercase;flex-shrink:0}
+  .ticker-wrap{overflow:hidden;flex:1}
+  .ticker-inner{display:flex;animation:tick 30s linear infinite;width:max-content}
+  .ticker-item{font-size:11px;font-weight:600;color:#fff;white-space:nowrap;padding:0 22px}
+  @keyframes tick{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
+
+  /* HERO */
+  .hero{position:relative;min-height:420px;display:flex;align-items:center;overflow:hidden}
+  .hero-img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+  .hero-overlay{position:absolute;inset:0;background:linear-gradient(90deg,rgba(10,20,55,.93) 0%,rgba(10,20,55,.75) 55%,rgba(10,20,55,.2) 100%)}
+  .hero-content{position:relative;z-index:2;padding:40px 28px;max-width:500px}
+  .hero-badge{display:inline-flex;align-items:center;gap:5px;background:rgba(249,115,22,.18);border:1px solid rgba(249,115,22,.35);color:var(--org);padding:3px 10px;border-radius:20px;font-size:10px;font-weight:700;letter-spacing:.5px;margin-bottom:14px;text-transform:uppercase}
+  h1.hero-title{font-family:'Barlow Condensed',sans-serif;font-size:44px;font-weight:900;color:#fff;line-height:.95;margin-bottom:12px;letter-spacing:-1.5px;text-transform:uppercase}
+  h1.hero-title span{color:var(--org)}
+  .hero-sub{color:rgba(255,255,255,.6);font-size:12px;line-height:1.65;margin-bottom:22px;max-width:360px}
+  .hero-btns{display:flex;gap:9px;flex-wrap:wrap}
+  .btn-p{background:var(--org);color:#fff;border:none;padding:9px 18px;border-radius:var(--r);font-size:12px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:5px;transition:.18s;font-family:'Barlow',sans-serif}
+  .btn-p:hover{background:var(--org-d)}
+  .btn-s{background:transparent;color:#fff;border:1px solid rgba(255,255,255,.35);padding:9px 18px;border-radius:var(--r);font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:5px;transition:.18s;font-family:'Barlow',sans-serif}
+  .btn-s:hover{border-color:rgba(255,255,255,.7)}
+  .hero-stats{position:absolute;right:24px;bottom:24px;z-index:2;display:flex;gap:18px}
+  .hst{text-align:center}
+  .hst-n{font-family:'Barlow Condensed',sans-serif;font-size:28px;font-weight:900;color:#fff}
+  .hst-n span{color:var(--org)}
+  .hst-l{font-size:9px;color:rgba(255,255,255,.45);text-transform:uppercase;letter-spacing:.5px}
+
+  /* SECTIONS */
+  section{padding:32px 20px}
+  .sec-hd{display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:16px}
+  .sec-t{font-family:'Barlow Condensed',sans-serif;font-size:20px;font-weight:800;color:var(--text);letter-spacing:-.3px;text-transform:uppercase}
+  .sec-t span{color:var(--org)}
+  .sec-sub{font-size:11px;color:var(--text3);margin-top:1px}
+  .sec-lnk{font-size:11px;color:var(--org);font-weight:700;cursor:pointer;white-space:nowrap}
+
+  /* STATS ROW */
+  .stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+  .stat-card{background:#fff;border:1px solid var(--gray-l);border-radius:var(--rm);padding:12px 14px;display:flex;align-items:center;gap:10px}
+  .stat-ic{width:36px;height:36px;border-radius:8px;background:var(--org-xl);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+  .stat-ic svg{width:18px;height:18px;fill:none;stroke:var(--org);stroke-width:2}
+  .stat-v{font-family:'Barlow Condensed',sans-serif;font-size:22px;font-weight:800;color:var(--text)}
+  .stat-n{font-size:10px;color:var(--text3)}
+
+  /* MATCH CARDS */
+  .match-card{background:var(--navy);border-radius:var(--rm);overflow:hidden;cursor:pointer;transition:.18s}
+  .match-card:hover{transform:translateY(-2px)}
+  .mc-top{background:rgba(255,255,255,.05);padding:8px 12px;display:flex;align-items:center;justify-content:space-between}
+  .mc-lg{font-size:9px;font-weight:700;color:var(--org);text-transform:uppercase;letter-spacing:.5px}
+  .mc-st{font-size:8px;font-weight:700;padding:2px 6px;border-radius:3px;text-transform:uppercase;letter-spacing:.3px}
+  .live{background:rgba(34,197,94,.15);color:#4ade80;border:1px solid rgba(34,197,94,.2)}
+  .upcoming{background:rgba(249,115,22,.15);color:var(--org);border:1px solid rgba(249,115,22,.2)}
+  .finished{background:rgba(148,163,184,.1);color:rgba(255,255,255,.4);border:1px solid rgba(255,255,255,.08)}
+  .mc-body{padding:12px}
+  .mc-teams{display:flex;align-items:center;gap:6px}
+  .mc-team{flex:1;display:flex;flex-direction:column;align-items:center;gap:5px}
+  .t-logo{width:40px;height:40px;border-radius:50%;overflow:hidden;border:2px solid rgba(255,255,255,.12);flex-shrink:0}
+  .t-logo img{width:100%;height:100%;object-fit:cover}
+  .mc-tn{font-size:10px;font-weight:700;color:#fff;text-align:center;line-height:1.2}
+  .mc-vs{flex-shrink:0;text-align:center}
+  .mc-sc{font-family:'Barlow Condensed',sans-serif;font-size:24px;font-weight:900;color:#fff;line-height:1}
+  .mc-vt{font-size:9px;color:rgba(255,255,255,.3);font-weight:600;display:block;text-transform:uppercase}
+  .mc-tm{font-size:10px;color:var(--org);font-weight:600;text-align:center}
+  .mc-foot{padding:6px 12px;border-top:1px solid rgba(255,255,255,.05);display:flex;align-items:center;justify-content:space-between}
+  .mc-venue{font-size:9px;color:rgba(255,255,255,.3);display:flex;align-items:center;gap:3px}
+  .mc-btn{font-size:9px;color:var(--org);font-weight:700;cursor:pointer}
+
+  /* TEAMS */
+  .teams-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:9px}
+  .team-card{background:#fff;border:1px solid var(--gray-l);border-radius:var(--rm);overflow:hidden;cursor:pointer;transition:.18s;position:relative}
+  .team-card:hover{border-color:var(--org);transform:translateY(-2px)}
+  .tc-cover{height:50px;overflow:hidden;position:relative}
+  .tc-cover img{width:100%;height:100%;object-fit:cover}
+  .tc-cover-overlay{position:absolute;inset:0;background:rgba(15,31,75,.45)}
+  .tc-body{padding:9px 8px;text-align:center}
+  .tc-logo{width:38px;height:38px;border-radius:50%;border:2.5px solid #fff;overflow:hidden;margin:-20px auto 5px;position:relative;z-index:1;background:#fff}
+  .tc-logo img{width:100%;height:100%;object-fit:cover}
+  .tc-name{font-size:11px;font-weight:700;color:var(--text);line-height:1.2;margin-bottom:2px}
+  .tc-meta{font-size:9px;color:var(--text3)}
+  .tc-badge{display:inline-block;font-size:8px;font-weight:700;padding:1px 5px;border-radius:3px;margin-top:3px;text-transform:uppercase;letter-spacing:.3px}
+  .ab{background:rgba(34,197,94,.1);color:#15803d}
+  .ib{background:rgba(239,68,68,.1);color:#b91c1c}
+
+  /* STANDINGS */
+  .std-wrap{background:var(--navy);border-radius:var(--rl);overflow:hidden}
+  .std-hd{padding:12px 16px;display:flex;align-items:center;justify-content:space-between;background:rgba(255,255,255,.04);border-bottom:1px solid rgba(255,255,255,.06)}
+  .std-hd-t{font-family:'Barlow Condensed',sans-serif;font-size:15px;font-weight:800;color:#fff;text-transform:uppercase}
+  .std-hd-t span{color:var(--org)}
+  table.std-tbl{width:100%;border-collapse:collapse}
+  .std-tbl th{font-size:9px;font-weight:700;color:rgba(255,255,255,.3);text-transform:uppercase;letter-spacing:.4px;padding:7px 10px;text-align:center;border-bottom:1px solid rgba(255,255,255,.05)}
+  .std-tbl th:first-child,.std-tbl th:nth-child(2){text-align:left}
+  .std-tbl td{padding:6px 10px;font-size:11px;color:rgba(255,255,255,.75);text-align:center;border-bottom:1px solid rgba(255,255,255,.04)}
+  .std-tbl td:first-child{width:22px;font-weight:700;font-size:10px;color:rgba(255,255,255,.35)}
+  .std-tbl td:nth-child(2){text-align:left}
+  .std-tbl tr:hover td{background:rgba(255,255,255,.03)}
+  .std-team{display:flex;align-items:center;gap:7px}
+  .std-lg{width:20px;height:20px;border-radius:50%;overflow:hidden;border:1px solid rgba(255,255,255,.1);flex-shrink:0}
+  .std-lg img{width:100%;height:100%;object-fit:cover}
+  .std-nm{font-size:11px;font-weight:600;color:#fff}
+  .pts{font-family:'Barlow Condensed',sans-serif;font-size:13px;font-weight:800;color:var(--org)}
+  .r1 td:first-child{color:var(--org)}
+  .r2 td:first-child{color:#C0C0C0}
+  .r3 td:first-child{color:#CD7F32}
+  .fw{display:inline-block;width:15px;height:15px;border-radius:2px;font-size:8px;font-weight:700;background:rgba(34,197,94,.2);color:#4ade80;text-align:center;line-height:15px;margin:1px}
+  .fd{display:inline-block;width:15px;height:15px;border-radius:2px;font-size:8px;font-weight:700;background:rgba(234,179,8,.2);color:#facc15;text-align:center;line-height:15px;margin:1px}
+  .fl{display:inline-block;width:15px;height:15px;border-radius:2px;font-size:8px;font-weight:700;background:rgba(239,68,68,.15);color:#f87171;text-align:center;line-height:15px;margin:1px}
+
+  /* PITCH SECTION */
+  .pitch-section{background:var(--navy);border-radius:var(--rl);overflow:hidden;border:1px solid rgba(255,255,255,.06)}
+  .ps-hd{padding:14px 18px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid rgba(255,255,255,.07);background:rgba(255,255,255,.03)}
+  .ps-match-info{display:flex;flex-direction:column;gap:2px}
+  .ps-title{font-family:'Barlow Condensed',sans-serif;font-size:17px;font-weight:800;color:#fff;text-transform:uppercase;letter-spacing:-.2px}
+  .ps-title span{color:var(--org)}
+  .ps-meta{font-size:10px;color:rgba(255,255,255,.35);display:flex;align-items:center;gap:6px}
+  .ps-meta-dot{width:4px;height:4px;border-radius:50%;background:var(--org);display:inline-block}
+  .ps-tabs{display:flex;gap:4px;background:rgba(0,0,0,.25);border-radius:6px;padding:3px}
+  .ps-tab{font-size:11px;font-weight:600;color:rgba(255,255,255,.45);padding:5px 13px;border-radius:4px;cursor:pointer;transition:.18s;letter-spacing:.2px;white-space:nowrap}
+  .ps-tab.active{background:var(--org);color:#fff;box-shadow:0 2px 8px rgba(249,115,22,.35)}
+  .ps-tab:hover:not(.active){color:rgba(255,255,255,.75);background:rgba(255,255,255,.07)}
+  .ps-body{padding:16px 18px;display:flex;gap:16px;align-items:flex-start}
+  .pitch-field{flex:1;min-width:0;position:relative}
+  .pitch-field svg{display:block;border-radius:10px;box-shadow:0 8px 32px rgba(0,0,0,.45)}
+  .pitch-panel{transition:opacity .22s,transform .22s}
+  .pitch-panel.hidden{opacity:0;transform:scale(.98);pointer-events:none;position:absolute;top:0;left:0;width:100%}
+  .pitch-info{width:172px;flex-shrink:0;display:flex;flex-direction:column;gap:0}
+  .pi-team-hd{display:flex;align-items:center;gap:8px;padding:10px 12px;background:rgba(255,255,255,.04);border-radius:8px;margin-bottom:10px}
+  .pi-team-logo{width:30px;height:30px;border-radius:50%;overflow:hidden;border:2px solid rgba(255,255,255,.15);flex-shrink:0}
+  .pi-team-logo img{width:100%;height:100%;object-fit:cover}
+  .pi-team-label{font-size:12px;font-weight:700;color:#fff;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .pi-formation-badge{font-family:'Barlow Condensed',sans-serif;font-size:11px;font-weight:700;color:var(--org);background:rgba(249,115,22,.12);padding:2px 7px;border-radius:4px;white-space:nowrap;flex-shrink:0}
+  .pi-legend{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;padding:0 2px}
+  .pi-legend-item{display:flex;align-items:center;gap:3px;font-size:9px;color:rgba(255,255,255,.4);font-weight:600;letter-spacing:.2px;text-transform:uppercase}
+  .pi-legend-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+  .pi-section-lbl{font-size:9px;color:rgba(255,255,255,.3);font-weight:700;letter-spacing:.5px;text-transform:uppercase;padding:0 6px;margin-bottom:4px}
+  .pi-pl{display:flex;flex-direction:column;gap:2px}
+  .pi-p{display:flex;align-items:center;gap:7px;padding:4px 7px;border-radius:5px;background:rgba(255,255,255,.04);cursor:pointer;transition:.15s}
+  .pi-p:hover{background:rgba(255,255,255,.09)}
+  .pi-n{width:18px;height:18px;border-radius:50%;font-size:8px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;color:#fff}
+  .pi-pn{font-size:10px;color:rgba(255,255,255,.7);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
+  .pi-ps{font-size:8px;color:rgba(255,255,255,.3);flex-shrink:0;font-weight:600}
+  .bench-div{height:1px;background:rgba(255,255,255,.07);margin:7px 0}
+  .bench-lbl{font-size:9px;color:rgba(255,255,255,.25);font-weight:700;letter-spacing:.4px;text-transform:uppercase;padding:0 6px;margin-bottom:4px}
+
+  /* TOP PLAYERS */
+  .players-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(148px,1fr));gap:9px}
+  .player-card{background:#fff;border:1px solid var(--gray-l);border-radius:var(--rm);cursor:pointer;transition:.18s;text-align:center;position:relative;overflow:hidden}
+  .player-card:hover{border-color:var(--org);transform:translateY(-2px)}
+  .pc-img{height:80px;overflow:hidden;position:relative}
+  .pc-img img{width:100%;height:100%;object-fit:cover;object-position:top}
+  .pc-img-ov{position:absolute;inset:0}
+  .pc-pos-bar{position:absolute;top:0;left:0;right:0;height:3px}
+  .pc-body{padding:8px 10px 10px}
+  .pc-avatar-wrap{width:44px;height:44px;border-radius:50%;border:3px solid #fff;overflow:hidden;margin:-22px auto 5px;position:relative;z-index:1}
+  .pc-avatar-wrap img{width:100%;height:100%;object-fit:cover;object-position:top}
+  .pc-name{font-size:11px;font-weight:700;color:var(--text);margin-bottom:1px}
+  .pc-team{font-size:9px;color:var(--text3);margin-bottom:4px}
+  .pc-rating{font-family:'Barlow Condensed',sans-serif;font-size:22px;font-weight:900;color:var(--text);margin:2px 0 1px}
+  .pc-rating span{font-size:11px;color:var(--text3);font-family:'Barlow',sans-serif;font-weight:400}
+  .pc-pos-badge{font-size:8px;font-weight:700;padding:2px 6px;border-radius:3px;text-transform:uppercase;letter-spacing:.3px}
+  .gk-b{background:rgba(249,115,22,.1);color:var(--org-d)}
+  .def-b{background:rgba(30,58,138,.08);color:var(--navy-m)}
+  .mid-b{background:rgba(22,163,74,.1);color:#15803d}
+  .fwd-b{background:rgba(220,38,38,.1);color:#b91c1c}
+  .pc-bar-wrap{background:var(--gray-ll);border-radius:3px;height:3px;margin-top:5px;overflow:hidden}
+  .pc-bar-fill{height:100%;border-radius:3px}
+
+  /* NEWS */
+  .news-grid{display:grid;grid-template-columns:2fr 1fr;gap:10px}
+  .news-main{border-radius:var(--rm);overflow:hidden;cursor:pointer;transition:.18s;position:relative}
+  .news-main:hover{transform:translateY(-2px)}
+  .news-main-img{height:180px;position:relative;overflow:hidden}
+  .news-main-img img{width:100%;height:100%;object-fit:cover;transition:.3s}
+  .news-main:hover .news-main-img img{transform:scale(1.04)}
+  .news-img-ov{position:absolute;inset:0;background:linear-gradient(to top,rgba(10,20,55,.92) 0%,rgba(10,20,55,.3) 60%,transparent 100%)}
+  .news-img-content{position:absolute;bottom:0;left:0;right:0;padding:14px}
+  .news-cat{font-size:8px;font-weight:700;background:var(--org);color:#fff;padding:2px 7px;border-radius:3px;text-transform:uppercase;letter-spacing:.5px;display:inline-block;margin-bottom:5px}
+  .news-title{font-size:13px;font-weight:700;color:#fff;line-height:1.3}
+  .news-body-pad{padding:9px 12px;background:#fff;border:1px solid var(--gray-l);border-top:none;border-radius:0 0 var(--rm) var(--rm)}
+  .news-meta{font-size:9px;color:var(--text3)}
+  .news-list{display:flex;flex-direction:column;gap:7px}
+  .news-item{background:#fff;border:1px solid var(--gray-l);border-radius:var(--rm);overflow:hidden;cursor:pointer;transition:.18s;display:flex;gap:0}
+  .news-item:hover{border-color:var(--org)}
+  .ni-img{width:68px;height:70px;flex-shrink:0;overflow:hidden}
+  .ni-img img{width:100%;height:100%;object-fit:cover}
+  .ni-body{padding:8px 9px;flex:1;min-width:0}
+  .ni-cat{font-size:8px;font-weight:700;color:var(--org);text-transform:uppercase;letter-spacing:.3px;margin-bottom:2px}
+  .ni-title{font-size:11px;font-weight:700;color:var(--text);line-height:1.3;margin-bottom:2px}
+  .ni-meta{font-size:9px;color:var(--text3)}
+
+  /* SEARCH */
+  .search-sec{background:var(--navy);border-radius:var(--rl);padding:26px 22px;text-align:center;position:relative;overflow:hidden}
+  .ss-bg{position:absolute;inset:0}
+  .ss-bg img{width:100%;height:100%;object-fit:cover;opacity:.12}
+  .ss-ov{position:absolute;inset:0;background:rgba(15,31,75,.92)}
+  .ss-content{position:relative;z-index:1}
+  .ss-title{font-family:'Barlow Condensed',sans-serif;font-size:24px;font-weight:900;color:#fff;margin-bottom:5px;text-transform:uppercase}
+  .ss-title span{color:var(--org)}
+  .ss-sub{font-size:11px;color:rgba(255,255,255,.5);margin-bottom:16px}
+  .search-box{display:flex;gap:7px;max-width:420px;margin:0 auto 12px}
+  .search-input{flex:1;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.15);color:#fff;padding:8px 12px;border-radius:var(--r);font-size:12px;font-family:'Barlow',sans-serif;outline:none;transition:.18s}
+  .search-input::placeholder{color:rgba(255,255,255,.35)}
+  .search-input:focus{background:rgba(255,255,255,.15);border-color:var(--org)}
+  .search-btn{background:var(--org);border:none;color:#fff;padding:8px 14px;border-radius:var(--r);font-size:12px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:4px;font-family:'Barlow',sans-serif;white-space:nowrap}
+  .search-tags{display:flex;gap:5px;justify-content:center;flex-wrap:wrap}
+  .s-tag{background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);color:rgba(255,255,255,.55);font-size:10px;font-weight:600;padding:3px 9px;border-radius:20px;cursor:pointer;transition:.15s}
+  .s-tag:hover{background:rgba(249,115,22,.2);border-color:rgba(249,115,22,.35);color:var(--org)}
+
+  /* FEATURED MATCH BANNER */
+  .feat-banner{position:relative;border-radius:var(--rl);overflow:hidden;height:160px}
+  .feat-banner img{width:100%;height:100%;object-fit:cover}
+  .feat-ov{position:absolute;inset:0;background:linear-gradient(90deg,rgba(10,20,55,.9) 0%,rgba(10,20,55,.5) 60%,rgba(10,20,55,.1) 100%)}
+  .feat-content{position:absolute;inset:0;padding:18px 20px;display:flex;align-items:center;gap:20px}
+  .feat-left{flex:1}
+  .feat-badge{font-size:9px;font-weight:700;color:var(--org);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px}
+  .feat-title{font-family:'Barlow Condensed',sans-serif;font-size:20px;font-weight:900;color:#fff;margin-bottom:6px;text-transform:uppercase;line-height:1}
+  .feat-sub{font-size:10px;color:rgba(255,255,255,.55)}
+  .feat-right{display:flex;align-items:center;gap:12px}
+  .feat-team{text-align:center}
+  .feat-tm-img{width:52px;height:52px;border-radius:50%;border:2px solid rgba(255,255,255,.2);overflow:hidden;margin:0 auto 5px}
+  .feat-tm-img img{width:100%;height:100%;object-fit:cover}
+  .feat-tm-name{font-size:10px;font-weight:700;color:#fff}
+  .feat-vs{font-family:'Barlow Condensed',sans-serif;font-size:18px;font-weight:900;color:rgba(255,255,255,.35)}
+
+  /* GALLERY STRIP */
+  .gallery-strip{display:grid;grid-template-columns:2fr 1fr 1fr;gap:8px;height:150px}
+  .gallery-strip .g1{border-radius:var(--rm);overflow:hidden;position:relative}
+  .gallery-strip .g2,.gallery-strip .g3{border-radius:var(--rm);overflow:hidden;position:relative}
+  .gallery-strip img{width:100%;height:100%;object-fit:cover;transition:.3s}
+  .gallery-strip .g1:hover img,.gallery-strip .g2:hover img,.gallery-strip .g3:hover img{transform:scale(1.05)}
+  .g-ov{position:absolute;inset:0;background:rgba(10,20,55,.3)}
+  .g-label{position:absolute;bottom:7px;left:9px;font-size:10px;font-weight:700;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.5)}
+
+  /* FOOTER */
+  footer{background:var(--navy);padding:28px 20px 14px;border-top:3px solid var(--org)}
+  .footer-top{display:grid;grid-template-columns:1.4fr 1fr 1fr 1fr;gap:20px;margin-bottom:20px}
+  .footer-brand .lbt{display:block;font-family:'Barlow Condensed',sans-serif;font-size:15px;font-weight:800;color:#fff;margin-bottom:5px}
+  .footer-brand p{font-size:10px;color:rgba(255,255,255,.4);line-height:1.65;max-width:190px}
+  .footer-col h4{font-size:10px;font-weight:700;color:rgba(255,255,255,.4);text-transform:uppercase;letter-spacing:.5px;margin-bottom:9px}
+  .footer-col a{display:block;font-size:11px;color:rgba(255,255,255,.4);text-decoration:none;margin-bottom:4px;transition:.15s}
+  .footer-col a:hover{color:var(--org)}
+  .footer-bottom{border-top:1px solid rgba(255,255,255,.07);padding-top:10px;display:flex;align-items:center;justify-content:space-between}
+  .footer-copy{font-size:10px;color:rgba(255,255,255,.3)}
+  .footer-socials{display:flex;gap:6px}
+  .soc{width:26px;height:26px;border-radius:5px;background:rgba(255,255,255,.06);display:flex;align-items:center;justify-content:center;cursor:pointer;transition:.15s}
+  .soc:hover{background:var(--org)}
+  .soc svg{width:13px;height:13px;fill:rgba(255,255,255,.5)}
+  .soc:hover svg{fill:#fff}
+
+  .two-col{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .divider{height:1px;background:var(--gray-ll)}
+  </style>
 </head>
-<body class="landing">
-  <header class="landing-top">
-    <div class="landing-brand">
-      <img src="<?= e(app_url($settings['logo'])); ?>" alt="logo">
-      <span><?= e($settings['system_name']); ?></span>
+<body>
+
+<!-- NAV -->
+<nav>
+  <a class="nav-logo" href="#">
+    <svg class="logo-ball" viewBox="0 0 30 30" fill="none">
+      <circle cx="15" cy="15" r="13" fill="#F97316" stroke="#EA580C" stroke-width="1.2"/>
+      <path d="M15 4 L18 9 L23 9 L19.5 12.5 L21 18 L15 14.5 L9 18 L10.5 12.5 L7 9 L12 9 Z" fill="#0F1F4B"/>
+      <circle cx="15" cy="15" r="13" fill="none" stroke="rgba(255,255,255,0.25)" stroke-width=".7"/>
+    </svg>
+    <div class="logo-text">RWANDA<span>FUTBOL</span><br><span style="font-size:8px;opacity:.45;color:#fff;font-weight:500;letter-spacing:.8px">FEDERATION SYSTEM</span></div>
+  </a>
+  <div class="nav-links">
+    <a href="#" class="active">Home</a>
+    <a href="login.php">Matches</a>
+    <a href="login.php">Teams</a>
+    <a href="login.php">Players</a>
+    <a href="login.php">Standings</a>
+    <a href="login.php">Results</a>
+    <a href="login.php">Stats</a>
+  </div>
+  <div class="nav-right">
+    <a href="login.php" class="btn-ln" style="display:inline-block; text-align:center; text-decoration:none;">Login</a>
+    <a href="login.php" class="btn-rg" style="display:inline-block; text-align:center; text-decoration:none;">Register</a>
+  </div>
+</nav>
+
+<!-- TICKER -->
+<div class="ticker">
+  <div class="ticker-lbl">LIVE</div>
+  <div class="ticker-wrap">
+    <div class="ticker-inner" id="ticker-inner">
+      <?php if (empty($tickerMatches)): ?>
+        <span class="ticker-item">🟢 No active matches today &nbsp;•&nbsp; Check schedule</span>
+      <?php else: ?>
+        <?php foreach ($tickerMatches as $tm): 
+          $scoreStr = ($tm['status'] === 'in_progress' || $tm['status'] === 'completed') ? " {$tm['home_score']} – {$tm['away_score']}" : " vs";
+          $statusStr = $tm['status'] === 'in_progress' ? "LIVE 67'" : ($tm['status'] === 'completed' ? 'FT' : date('d M H:i', strtotime($tm['match_date'] . ' ' . $tm['match_time'])));
+        ?>
+          <span class="ticker-item"><?= e($tm['home_name']); ?><?= $scoreStr; ?> <?= e($tm['away_name']); ?> &nbsp;•&nbsp; <?= $statusStr; ?></span>
+        <?php endforeach; ?>
+      <?php endif; ?>
     </div>
-    <a href="login.php" class="btn btn-primary btn-sm">Login</a>
-  </header>
+  </div>
+</div>
 
-  <main class="landing-main">
-    <div class="landing-grid">
-      <section class="hero-card">
-        <h1>Modern Football Administration Platform</h1>
-        <p>Manage federation operations, approvals, team activities, and reporting from one clean and professional dashboard.</p>
-        <ul class="hero-list">
-          <li><?= icon_svg('approval'); ?> Centralized approval workflows</li>
-          <li><?= icon_svg('report'); ?> Real-time performance and reports</li>
-          <li><?= icon_svg('users'); ?> Role-based access for federation and teams</li>
-        </ul>
-        <a href="login.php" class="btn btn-primary">Sign In</a>
-      </section>
+<!-- HERO -->
+<div class="hero">
+  <img class="hero-img" src="https://images.unsplash.com/photo-1522778119026-d647f0596c20?w=1400&q=80" alt="Stadium"/>
+  <div class="hero-overlay"></div>
+  <div class="hero-content">
+    <div class="hero-badge">⚽ Official Federation Platform</div>
+    <h1 class="hero-title">Rwanda<br><span>Football</span><br>Management</h1>
+    <p class="hero-sub">The official platform for managing teams, players, lineups, match results and federation workflows across Rwandan professional football.</p>
+    <div class="hero-btns">
+      <a href="login.php" class="btn-p" style="text-decoration:none;">
+        <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M5 3l14 9-14 9V3z"/></svg>
+        View Live Match
+      </a>
+      <a href="login.php" class="btn-s" style="text-decoration:none;">
+        <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+        Explore Teams
+      </a>
+    </div>
+  </div>
+  <div class="hero-stats">
+    <div class="hst"><div class="hst-n"><?= $totalTeams; ?><span>+</span></div><div class="hst-l">Teams</div></div>
+    <div class="hst"><div class="hst-n"><?= $totalPlayers; ?><span>+</span></div><div class="hst-l">Players</div></div>
+    <div class="hst"><div class="hst-n"><?= $totalMatches; ?></div><div class="hst-l">Matches</div></div>
+    <div class="hst"><div class="hst-n"><?= $totalMatchdays; ?></div><div class="hst-l">Matchdays</div></div>
+  </div>
+</div>
 
-      <aside class="hero-side">
-        <h3 class="landing-side-title">Single Secure Access</h3>
-        <p class="landing-side-text">All users sign in from one secure page and are automatically sent to the correct dashboard.</p>
-        <div class="panel-links">
-          <a class="panel-link" href="login.php"><span>Federation Dashboard</span><span>Open</span></a>
-          <a class="panel-link" href="login.php"><span>Team Dashboard</span><span>Open</span></a>
+<!-- STATS ROW -->
+<section style="padding:16px 20px">
+  <div class="stats-row">
+    <div class="stat-card"><div class="stat-ic"><svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></div><div><div class="stat-v"><?= $activeTeams; ?></div><div class="stat-n">Active Teams</div></div></div>
+    <div class="stat-card"><div class="stat-ic"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg></div><div><div class="stat-v"><?= $scheduledMatches; ?></div><div class="stat-n">Scheduled</div></div></div>
+    <div class="stat-card"><div class="stat-ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg></div><div><div class="stat-v" id="live-count"><?= $liveMatches; ?></div><div class="stat-n">Live Now</div></div></div>
+    <div class="stat-card"><div class="stat-ic"><svg viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg></div><div><div class="stat-v"><?= $seasonGoals; ?></div><div class="stat-n">Season Goals</div></div></div>
+  </div>
+</section>
+
+<!-- FEATURED MATCH BANNER -->
+<section style="padding:8px 20px 16px">
+  <?php if ($featuredMatch): 
+    $isLive = $featuredMatch['status'] === 'in_progress';
+    $scoreStr = ($isLive || $featuredMatch['status'] === 'completed') ? "{$featuredMatch['home_score']} – {$featuredMatch['away_score']}" : "vs";
+  ?>
+  <div class="feat-banner">
+    <img src="https://images.unsplash.com/photo-1574629810360-7efbbe195018?w=1200&q=80" alt="Match"/>
+    <div class="feat-ov"></div>
+    <div class="feat-content">
+      <div class="feat-left">
+        <div class="feat-badge"><?= $isLive ? '🟢 LIVE NOW' : '🏆 FEATURED MATCH'; ?> — MATCHDAY <?= $featuredMatch['matchday']; ?></div>
+        <div class="feat-title"><?= e($featuredMatch['home_name']); ?><br>vs <?= e($featuredMatch['away_name']); ?></div>
+        <div class="feat-sub"><?= e($featuredMatch['stadium_name'] ?: 'Amahoro National Stadium'); ?> &nbsp;•&nbsp; <span style="color:var(--org);font-weight:700" id="live-min"><?= $isLive ? "67'" : "Upcoming"; ?></span></div>
+      </div>
+      <div class="feat-right">
+        <div class="feat-team">
+          <div class="feat-tm-img"><img src="<?= e($featuredMatch['home_logo'] ?: 'https://images.unsplash.com/photo-1551958219-acbc595d9e15?w=100&q=80'); ?>" alt="Home"/></div>
+          <div class="feat-tm-name"><?= e($featuredMatch['home_name']); ?></div>
         </div>
-      </aside>
+        <div style="text-align:center">
+          <div style="font-family:'Barlow Condensed',sans-serif;font-size:36px;font-weight:900;color:#fff;line-height:1" id="live-score"><?= $scoreStr; ?></div>
+          <div class="feat-vs"><?= $isLive ? 'LIVE' : 'VS'; ?></div>
+        </div>
+        <div class="feat-team">
+          <div class="feat-tm-img"><img src="<?= e($featuredMatch['away_logo'] ?: 'https://images.unsplash.com/photo-1587329310690-91114ac008f0?w=100&q=80'); ?>" alt="Away"/></div>
+          <div class="feat-tm-name"><?= e($featuredMatch['away_name']); ?></div>
+        </div>
+      </div>
     </div>
-  </main>
+  </div>
+  <?php endif; ?>
+</section>
+
+<div class="divider"></div>
+
+<!-- MATCHES + STANDINGS -->
+<section>
+  <div class="two-col">
+    <div>
+      <div class="sec-hd">
+        <div><div class="sec-t">Upcoming & <span>Live Matches</span></div><div class="sec-sub">Current matchday schedule</div></div>
+        <a class="sec-lnk" href="login.php" style="text-decoration:none;">All matches →</a>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <?php if (empty($matchdayMatches)): ?>
+          <div class="empty-state" style="color:var(--text3);text-align:center;padding:20px;">No scheduled matches.</div>
+        <?php else: ?>
+          <?php foreach ($matchdayMatches as $m): 
+            $isLive = $m['status'] === 'in_progress';
+            $isFinished = $m['status'] === 'completed';
+            $stBadge = $isLive ? 'Live' : ($isFinished ? 'Full Time' : 'Upcoming');
+            $stClass = $isLive ? 'live' : ($isFinished ? 'finished' : 'upcoming');
+            $scoreText = ($isLive || $isFinished) ? "{$m['home_score']} – {$m['away_score']}" : "vs";
+            $subText = $isLive ? "67'" : ($isFinished ? 'FT' : date('D H:i', strtotime($m['match_date'] . ' ' . $m['match_time'])));
+          ?>
+          <div class="match-card">
+            <div class="mc-top"><span class="mc-lg">Rwanda Premier League</span><div style="display:flex;gap:5px;align-items:center"><span style="font-size:9px;color:rgba(255,255,255,.35)">MD <?= $m['matchday']; ?></span><span class="mc-st <?= $stClass; ?>"><?= $isLive ? '● ' : ''; ?><?= $stBadge; ?></span></div></div>
+            <div class="mc-body"><div class="mc-teams">
+              <div class="mc-team"><div class="t-logo"><img src="<?= e($m['home_logo'] ?: 'https://images.unsplash.com/photo-1551958219-acbc595d9e15?w=80&q=80'); ?>" alt="Home"/></div><div class="mc-tn"><?= e($m['home_name']); ?></div></div>
+              <div class="mc-vs"><div class="mc-sc"><?= $scoreText; ?></div><span class="mc-vt"><?= $subText; ?></span></div>
+              <div class="mc-team"><div class="t-logo"><img src="<?= e($m['away_logo'] ?: 'https://images.unsplash.com/photo-1587329310690-91114ac008f0?w=80&q=80'); ?>" alt="Away"/></div><div class="mc-tn"><?= e($m['away_name']); ?></div></div>
+            </div></div>
+            <div class="mc-foot"><span class="mc-venue">📍 <?= e($m['stadium_name'] ?: 'Amahoro Stadium'); ?></span><a href="login.php" class="mc-btn" style="text-decoration:none;">View Lineup →</a></div>
+          </div>
+          <?php endforeach; ?>
+        <?php endif; ?>
+      </div>
+    </div>
+    
+    <div>
+      <div class="sec-hd">
+        <div><div class="sec-t">League <span>Standings</span></div><div class="sec-sub">Season 2026/27 Table</div></div>
+        <a class="sec-lnk" href="login.php" style="text-decoration:none;">Full table →</a>
+      </div>
+      <div class="std-wrap">
+        <div class="std-hd"><span class="std-hd-t">Rwanda Premier <span>League</span></span><span style="font-size:10px;color:rgba(255,255,255,.3)">MD 22/30</span></div>
+        <table class="std-tbl">
+          <thead><tr><th>#</th><th>Team</th><th>P</th><th>W</th><th>D</th><th>L</th><th>GD</th><th>Form</th><th>Pts</th></tr></thead>
+          <tbody>
+            <?php if (empty($standings)): ?>
+              <tr><td colspan="9" style="color:rgba(255,255,255,.35);padding:20px;">No standings recorded.</td></tr>
+            <?php else: ?>
+              <?php foreach ($standings as $row): 
+                $rank = $row['position'];
+                $rClass = $rank === 1 ? 'r1' : ($rank === 2 ? 'r2' : ($rank === 3 ? 'r3' : ''));
+              ?>
+              <tr class="<?= $rClass; ?>">
+                <td><?= $rank; ?></td>
+                <td><div class="std-team"><div class="std-lg"><img src="<?= e($row['team_logo'] ?: 'https://images.unsplash.com/photo-1551958219-acbc595d9e15?w=40&q=80'); ?>" alt=""/></div><span class="std-nm"><?= e($row['team_name']); ?></span></div></td>
+                <td><?= $row['matches_played']; ?></td>
+                <td><?= $row['wins']; ?></td>
+                <td><?= $row['draws']; ?></td>
+                <td><?= $row['losses']; ?></td>
+                <td><?= $row['goal_difference'] >= 0 ? '+' . $row['goal_difference'] : $row['goal_difference']; ?></td>
+                <td><span class="fw">W</span><span class="fw">W</span><span class="fd">D</span><span class="fw">W</span><span class="fl">L</span></td>
+                <td class="pts"><?= $row['points']; ?></td>
+              </tr>
+              <?php endforeach; ?>
+            <?php endif; ?>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- TEAMS -->
+<section style="background:var(--off)">
+  <div class="sec-hd">
+    <div><div class="sec-t">All <span>Registered Teams</span></div><div class="sec-sub">2026/27 Premier League Season</div></div>
+    <a class="sec-lnk" href="login.php" style="text-decoration:none;">Manage teams →</a>
+  </div>
+  <div class="teams-grid">
+    <?php if (empty($registeredTeams)): ?>
+      <div class="empty-state" style="color:var(--text3);text-align:center;padding:20px;">No teams registered.</div>
+    <?php else: ?>
+      <?php foreach ($registeredTeams as $team): ?>
+      <div class="team-card">
+        <div class="tc-cover">
+          <img src="https://images.unsplash.com/photo-1522778119026-d647f0596c20?w=300&q=70" alt=""/>
+          <div class="tc-cover-overlay"></div>
+        </div>
+        <div class="tc-body">
+          <div class="tc-logo">
+            <img src="<?= e($team['logo'] ?: 'https://images.unsplash.com/photo-1551958219-acbc595d9e15?w=80&q=80'); ?>" alt="Logo"/>
+          </div>
+          <div class="tc-name"><?= e($team['name']); ?></div>
+          <div class="tc-meta"><?= e($team['city'] ?: 'Kigali'); ?></div>
+          <span class="tc-badge <?= $team['is_active'] ? 'ab' : 'ib'; ?>"><?= $team['is_active'] ? 'Active' : 'Inactive'; ?></span>
+        </div>
+      </div>
+      <?php endforeach; ?>
+    <?php endif; ?>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- LINEUP PREVIEW (INTERACTIVE) -->
+<section>
+  <div class="sec-hd">
+    <div><div class="sec-t">Match <span>Lineup Preview</span></div><div class="sec-sub">Toggle teams to view confirmed formations</div></div>
+    <a class="sec-lnk" href="login.php" style="text-decoration:none;">Full lineup →</a>
+  </div>
+  <div class="pitch-section">
+    <!-- Header -->
+    <div class="ps-hd">
+      <div class="ps-match-info">
+        <div class="ps-title" id="ps-match-title">APR FC <span>vs Police FC</span></div>
+        <div class="ps-meta">
+          <span class="ps-meta-dot"></span>
+          <span id="ps-formation-label">Formation: 4-3-3</span>
+          <span style="color:rgba(255,255,255,.15)">|</span>
+          <span>Matchday 23 &nbsp;•&nbsp; Sat 15:00</span>
+        </div>
+      </div>
+      <div class="ps-tabs">
+        <span class="ps-tab active" data-team="0">APR FC</span>
+        <span class="ps-tab" data-team="1">Police FC</span>
+      </div>
+    </div>
+    <!-- Body -->
+    <div class="ps-body">
+      <!-- PITCH FIELD: SVG panels -->
+      <div class="pitch-field">
+
+        <!-- APR FC — 4-3-3 -->
+        <div class="pitch-panel" id="panel-0">
+          <svg viewBox="0 0 360 500" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto">
+            <defs>
+              <linearGradient id="gfg0" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#185e2d"/>
+                <stop offset="25%" stop-color="#1d6b34"/>
+                <stop offset="50%" stop-color="#196030"/>
+                <stop offset="75%" stop-color="#1d6b34"/>
+                <stop offset="100%" stop-color="#185e2d"/>
+              </linearGradient>
+              <filter id="shadow0" x="-20%" y="-20%" width="140%" height="140%">
+                <feDropShadow dx="0" dy="1" stdDeviation="2" flood-color="rgba(0,0,0,.5)"/>
+              </filter>
+            </defs>
+            <!-- Base + stripes -->
+            <rect width="360" height="500" rx="10" fill="url(#gfg0)"/>
+            <rect x="0" y="0" width="360" height="42" rx="10" fill="rgba(0,0,0,.07)"/>
+            <rect x="0" y="84" width="360" height="42" fill="rgba(0,0,0,.07)"/>
+            <rect x="0" y="168" width="360" height="42" fill="rgba(0,0,0,.07)"/>
+            <rect x="0" y="252" width="360" height="42" fill="rgba(0,0,0,.07)"/>
+            <rect x="0" y="336" width="360" height="42" fill="rgba(0,0,0,.07)"/>
+            <rect x="0" y="420" width="360" height="42" fill="rgba(0,0,0,.07)"/>
+            <!-- Pitch lines -->
+            <rect x="22" y="20" width="316" height="460" rx="4" fill="none" stroke="rgba(255,255,255,.5)" stroke-width="1.5"/>
+            <line x1="22" y1="250" x2="338" y2="250" stroke="rgba(255,255,255,.5)" stroke-width="1.2"/>
+            <circle cx="180" cy="250" r="42" fill="none" stroke="rgba(255,255,255,.5)" stroke-width="1.2"/>
+            <circle cx="180" cy="250" r="3.5" fill="rgba(255,255,255,.7)"/>
+            <!-- Top penalty box -->
+            <rect x="98" y="20" width="164" height="68" fill="none" stroke="rgba(255,255,255,.5)" stroke-width="1.2"/>
+            <rect x="128" y="20" width="104" height="30" fill="none" stroke="rgba(255,255,255,.5)" stroke-width="1.2"/>
+            <circle cx="180" cy="82" r="3" fill="rgba(255,255,255,.6)"/>
+            <path d="M 132 90 A 40 40 0 0 1 228 90" fill="none" stroke="rgba(255,255,255,.38)" stroke-width="1.1"/>
+            <!-- Bottom penalty box -->
+            <rect x="98" y="412" width="164" height="68" fill="none" stroke="rgba(255,255,255,.5)" stroke-width="1.2"/>
+            <rect x="128" y="450" width="104" height="30" fill="none" stroke="rgba(255,255,255,.5)" stroke-width="1.2"/>
+            <circle cx="180" cy="418" r="3" fill="rgba(255,255,255,.6)"/>
+            <path d="M 132 410 A 40 40 0 0 0 228 410" fill="none" stroke="rgba(255,255,255,.38)" stroke-width="1.1"/>
+            <!-- Corner arcs -->
+            <path d="M 22 30 A 8 8 0 0 1 30 20" fill="none" stroke="rgba(255,255,255,.35)" stroke-width="1"/>
+            <path d="M 338 30 A 8 8 0 0 0 330 20" fill="none" stroke="rgba(255,255,255,.35)" stroke-width="1"/>
+            <path d="M 22 470 A 8 8 0 0 0 30 480" fill="none" stroke="rgba(255,255,255,.35)" stroke-width="1"/>
+            <path d="M 338 470 A 8 8 0 0 1 330 480" fill="none" stroke="rgba(255,255,255,.35)" stroke-width="1"/>
+            <!-- Formation badge -->
+            <rect x="146" y="7" width="68" height="14" rx="4" fill="rgba(249,115,22,.9)"/>
+            <text x="180" y="17.5" text-anchor="middle" font-size="8" font-weight="700" fill="white" font-family="Barlow,sans-serif" letter-spacing=".5">4 – 3 – 3</text>
+
+            <!-- GK -->
+            <g filter="url(#shadow0)"><circle cx="180" cy="455" r="17" fill="#F97316" stroke="white" stroke-width="2"/></g>
+            <text x="180" y="451" text-anchor="middle" font-size="7" font-weight="700" fill="white" font-family="Barlow,sans-serif">NSHUTI</text>
+            <text x="180" y="461" text-anchor="middle" font-size="6" fill="rgba(255,255,255,.75)" font-family="sans-serif">GK</text>
+            <rect x="168" y="472" width="24" height="10" rx="3" fill="rgba(0,0,0,.5)"/>
+            <text x="180" y="479.5" text-anchor="middle" font-size="6.5" fill="white" font-family="Barlow,sans-serif" font-weight="700">#1</text>
+
+            <!-- DEF 4 -->
+            <g filter="url(#shadow0)"><circle cx="55" cy="375" r="15" fill="#1E3A8A" stroke="white" stroke-width="1.8"/></g>
+            <text x="55" y="371" text-anchor="middle" font-size="6.2" font-weight="700" fill="white" font-family="sans-serif">SAFARI</text>
+            <text x="55" y="380" text-anchor="middle" font-size="5.5" fill="rgba(255,255,255,.7)" font-family="sans-serif">RB</text>
+            <rect x="43" y="390" width="24" height="9" rx="2.5" fill="rgba(0,0,0,.45)"/>
+            <text x="55" y="397" text-anchor="middle" font-size="6" fill="white" font-family="sans-serif">#3</text>
+
+            <g filter="url(#shadow0)"><circle cx="128" cy="375" r="15" fill="#1E3A8A" stroke="white" stroke-width="1.8"/></g>
+            <text x="128" y="371" text-anchor="middle" font-size="5.8" font-weight="700" fill="white" font-family="sans-serif">HAKIZIM.</text>
+            <text x="128" y="380" text-anchor="middle" font-size="5.5" fill="rgba(255,255,255,.7)" font-family="sans-serif">CB</text>
+            <rect x="116" y="390" width="24" height="9" rx="2.5" fill="rgba(0,0,0,.45)"/>
+            <text x="128" y="397" text-anchor="middle" font-size="6" fill="white" font-family="sans-serif">#5</text>
+
+            <g filter="url(#shadow0)"><circle cx="232" cy="375" r="15" fill="#1E3A8A" stroke="white" stroke-width="1.8"/></g>
+            <text x="232" y="371" text-anchor="middle" font-size="6.2" font-weight="700" fill="white" font-family="sans-serif">MUTESA</text>
+            <text x="232" y="380" text-anchor="middle" font-size="5.5" fill="rgba(255,255,255,.7)" font-family="sans-serif">CB</text>
+            <rect x="220" y="390" width="24" height="9" rx="2.5" fill="rgba(0,0,0,.45)"/>
+            <text x="232" y="397" text-anchor="middle" font-size="6" fill="white" font-family="sans-serif">#4</text>
+
+            <g filter="url(#shadow0)"><circle cx="305" cy="375" r="15" fill="#1E3A8A" stroke="white" stroke-width="1.8"/></g>
+            <text x="305" y="371" text-anchor="middle" font-size="6.2" font-weight="700" fill="white" font-family="sans-serif">RUGIRA</text>
+            <text x="305" y="380" text-anchor="middle" font-size="5.5" fill="rgba(255,255,255,.7)" font-family="sans-serif">LB</text>
+            <rect x="293" y="390" width="24" height="9" rx="2.5" fill="rgba(0,0,0,.45)"/>
+            <text x="305" y="397" text-anchor="middle" font-size="6" fill="white" font-family="sans-serif">#12</text>
+
+            <!-- MID 3 -->
+            <g filter="url(#shadow0)"><circle cx="88" cy="282" r="15" fill="#15803d" stroke="white" stroke-width="1.8"/></g>
+            <text x="88" y="278" text-anchor="middle" font-size="6" font-weight="700" fill="white" font-family="sans-serif">NIYIBIZI</text>
+            <text x="88" y="287" text-anchor="middle" font-size="5.5" fill="rgba(255,255,255,.7)" font-family="sans-serif">CM</text>
+            <rect x="76" y="297" width="24" height="9" rx="2.5" fill="rgba(0,0,0,.45)"/>
+            <text x="88" y="304" text-anchor="middle" font-size="6" fill="white" font-family="sans-serif">#8</text>
+
+            <g filter="url(#shadow0)"><circle cx="180" cy="272" r="15" fill="#15803d" stroke="white" stroke-width="1.8"/></g>
+            <text x="180" y="268" text-anchor="middle" font-size="5.8" font-weight="700" fill="white" font-family="sans-serif">UWIMANA</text>
+            <text x="180" y="277" text-anchor="middle" font-size="5.5" fill="rgba(255,255,255,.7)" font-family="sans-serif">DM</text>
+            <rect x="168" y="287" width="24" height="9" rx="2.5" fill="rgba(0,0,0,.45)"/>
+            <text x="180" y="294" text-anchor="middle" font-size="6" fill="white" font-family="sans-serif">#6</text>
+
+            <g filter="url(#shadow0)"><circle cx="272" cy="282" r="15" fill="#15803d" stroke="white" stroke-width="1.8"/></g>
+            <text x="272" y="278" text-anchor="middle" font-size="5.8" font-weight="700" fill="white" font-family="sans-serif">HABIMANA</text>
+            <text x="272" y="287" text-anchor="middle" font-size="5.5" fill="rgba(255,255,255,.7)" font-family="sans-serif">CM</text>
+            <rect x="260" y="297" width="24" height="9" rx="2.5" fill="rgba(0,0,0,.45)"/>
+            <text x="272" y="304" text-anchor="middle" font-size="6" fill="white" font-family="sans-serif">#10</text>
+
+            <!-- FWD 3 -->
+            <g filter="url(#shadow0)"><circle cx="78" cy="172" r="15" fill="#dc2626" stroke="white" stroke-width="1.8"/></g>
+            <text x="78" y="168" text-anchor="middle" font-size="5.5" font-weight="700" fill="white" font-family="sans-serif">MUNYANEZA</text>
+            <text x="78" y="177" text-anchor="middle" font-size="5.5" fill="rgba(255,255,255,.7)" font-family="sans-serif">LW</text>
+            <rect x="66" y="187" width="24" height="9" rx="2.5" fill="rgba(0,0,0,.45)"/>
+            <text x="78" y="194" text-anchor="middle" font-size="6" fill="white" font-family="sans-serif">#11</text>
+
+            <g filter="url(#shadow0)"><circle cx="180" cy="158" r="15" fill="#dc2626" stroke="white" stroke-width="1.8"/></g>
+            <text x="180" y="154" text-anchor="middle" font-size="5.5" font-weight="700" fill="white" font-family="sans-serif">NDAYISHIM.</text>
+            <text x="180" y="163" text-anchor="middle" font-size="5.5" fill="rgba(255,255,255,.7)" font-family="sans-serif">ST</text>
+            <rect x="168" y="173" width="24" height="9" rx="2.5" fill="rgba(0,0,0,.45)"/>
+            <text x="180" y="180" text-anchor="middle" font-size="6" fill="white" font-family="sans-serif">#9</text>
+
+            <g filter="url(#shadow0)"><circle cx="282" cy="172" r="15" fill="#dc2626" stroke="white" stroke-width="1.8"/></g>
+            <text x="282" y="168" text-anchor="middle" font-size="5.5" font-weight="700" fill="white" font-family="sans-serif">IRADUKUNDA</text>
+            <text x="282" y="177" text-anchor="middle" font-size="5.5" fill="rgba(255,255,255,.7)" font-family="sans-serif">RW</text>
+            <rect x="270" y="187" width="24" height="9" rx="2.5" fill="rgba(0,0,0,.45)"/>
+            <text x="282" y="194" text-anchor="middle" font-size="6" fill="white" font-family="sans-serif">#7</text>
+
+            <!-- Legend -->
+            <rect x="22" y="484" width="316" height="14" rx="3" fill="rgba(0,0,0,.25)"/>
+            <circle cx="35" cy="491" r="5" fill="#F97316"/><text x="43" y="495" font-size="7" fill="rgba(255,255,255,.6)" font-family="sans-serif" font-weight="600">GK</text>
+            <circle cx="72" cy="491" r="5" fill="#1E3A8A"/><text x="80" y="495" font-size="7" fill="rgba(255,255,255,.6)" font-family="sans-serif" font-weight="600">DEF</text>
+            <circle cx="112" cy="491" r="5" fill="#15803d"/><text x="120" y="495" font-size="7" fill="rgba(255,255,255,.6)" font-family="sans-serif" font-weight="600">MID</text>
+            <circle cx="151" cy="491" r="5" fill="#dc2626"/><text x="159" y="495" font-size="7" fill="rgba(255,255,255,.6)" font-family="sans-serif" font-weight="600">FWD</text>
+          </svg>
+        </div>
+
+        <!-- Police FC — 4-4-2 -->
+        <div class="pitch-panel hidden" id="panel-1">
+          <svg viewBox="0 0 360 500" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto">
+            <defs>
+              <linearGradient id="gfg1" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#185e2d"/>
+                <stop offset="25%" stop-color="#1d6b34"/>
+                <stop offset="50%" stop-color="#196030"/>
+                <stop offset="75%" stop-color="#1d6b34"/>
+                <stop offset="100%" stop-color="#185e2d"/>
+              </linearGradient>
+              <filter id="shadow1" x="-20%" y="-20%" width="140%" height="140%">
+                <feDropShadow dx="0" dy="1" stdDeviation="2" flood-color="rgba(0,0,0,.5)"/>
+              </filter>
+            </defs>
+            <rect width="360" height="500" rx="10" fill="url(#gfg1)"/>
+            <rect x="0" y="0" width="360" height="42" rx="10" fill="rgba(0,0,0,.07)"/>
+            <rect x="0" y="84" width="360" height="42" fill="rgba(0,0,0,.07)"/>
+            <rect x="0" y="168" width="360" height="42" fill="rgba(0,0,0,.07)"/>
+            <rect x="0" y="252" width="360" height="42" fill="rgba(0,0,0,.07)"/>
+            <rect x="0" y="336" width="360" height="42" fill="rgba(0,0,0,.07)"/>
+            <rect x="0" y="420" width="360" height="42" fill="rgba(0,0,0,.07)"/>
+            <rect x="22" y="20" width="316" height="460" rx="4" fill="none" stroke="rgba(255,255,255,.5)" stroke-width="1.5"/>
+            <line x1="22" y1="250" x2="338" y2="250" stroke="rgba(255,255,255,.5)" stroke-width="1.2"/>
+            <circle cx="180" cy="250" r="42" fill="none" stroke="rgba(255,255,255,.5)" stroke-width="1.2"/>
+            <circle cx="180" cy="250" r="3.5" fill="rgba(255,255,255,.7)"/>
+            <rect x="98" y="20" width="164" height="68" fill="none" stroke="rgba(255,255,255,.5)" stroke-width="1.2"/>
+            <rect x="128" y="20" width="104" height="30" fill="none" stroke="rgba(255,255,255,.5)" stroke-width="1.2"/>
+            <circle cx="180" cy="82" r="3" fill="rgba(255,255,255,.6)"/>
+            <path d="M 132 90 A 40 40 0 0 1 228 90" fill="none" stroke="rgba(255,255,255,.38)" stroke-width="1.1"/>
+            <rect x="98" y="412" width="164" height="68" fill="none" stroke="rgba(255,255,255,.5)" stroke-width="1.2"/>
+            <rect x="128" y="450" width="104" height="30" fill="none" stroke="rgba(255,255,255,.5)" stroke-width="1.2"/>
+            <circle cx="180" cy="418" r="3" fill="rgba(255,255,255,.6)"/>
+            <path d="M 132 410 A 40 40 0 0 0 228 410" fill="none" stroke="rgba(255,255,255,.38)" stroke-width="1.1"/>
+            <path d="M 22 30 A 8 8 0 0 1 30 20" fill="none" stroke="rgba(255,255,255,.35)" stroke-width="1"/>
+            <path d="M 338 30 A 8 8 0 0 0 330 20" fill="none" stroke="rgba(255,255,255,.35)" stroke-width="1"/>
+            <path d="M 22 470 A 8 8 0 0 0 30 480" fill="none" stroke="rgba(255,255,255,.35)" stroke-width="1"/>
+            <path d="M 338 470 A 8 8 0 0 1 330 480" fill="none" stroke="rgba(255,255,255,.35)" stroke-width="1"/>
+            <rect x="146" y="7" width="68" height="14" rx="4" fill="rgba(124,58,237,.9)"/>
+            <text x="180" y="17.5" text-anchor="middle" font-size="8" font-weight="700" fill="white" font-family="Barlow,sans-serif" letter-spacing=".5">4 – 4 – 2</text>
+
+            <!-- GK -->
+            <g filter="url(#shadow1)"><circle cx="180" cy="455" r="17" fill="#F97316" stroke="white" stroke-width="2"/></g>
+            <text x="180" y="451" text-anchor="middle" font-size="6.5" font-weight="700" fill="white" font-family="Barlow,sans-serif">HAKIZIM.</text>
+            <text x="180" y="461" text-anchor="middle" font-size="6" fill="rgba(255,255,255,.75)" font-family="sans-serif">GK</text>
+            <rect x="168" y="472" width="24" height="10" rx="3" fill="rgba(0,0,0,.5)"/>
+            <text x="180" y="479.5" text-anchor="middle" font-size="6.5" fill="white" font-family="Barlow,sans-serif" font-weight="700">#1</text>
+
+            <!-- DEF 4 -->
+            <g filter="url(#shadow1)"><circle cx="55" cy="375" r="15" fill="#1E3A8A" stroke="white" stroke-width="1.8"/></g>
+            <text x="55" y="371" text-anchor="middle" font-size="5.8" font-weight="700" fill="white" font-family="sans-serif">NZEYIM.</text>
+            <text x="55" y="380" text-anchor="middle" font-size="5.5" fill="rgba(255,255,255,.7)" font-family="sans-serif">RB</text>
+            <rect x="43" y="390" width="24" height="9" rx="2.5" fill="rgba(0,0,0,.45)"/>
+            <text x="55" y="397" text-anchor="middle" font-size="6" fill="white" font-family="sans-serif">#2</text>
+
+            <g filter="url(#shadow1)"><circle cx="128" cy="375" r="15" fill="#1E3A8A" stroke="white" stroke-width="1.8"/></g>
+            <text x="128" y="371" text-anchor="middle" font-size="6" font-weight="700" fill="white" font-family="sans-serif">KAREMERA</text>
+            <text x="128" y="380" text-anchor="middle" font-size="5.5" fill="rgba(255,255,255,.7)" font-family="sans-serif">CB</text>
+            <rect x="116" y="390" width="24" height="9" rx="2.5" fill="rgba(0,0,0,.45)"/>
+            <text x="128" y="397" text-anchor="middle" font-size="6" fill="white" font-family="sans-serif">#5</text>
+
+            <g filter="url(#shadow1)"><circle cx="232" cy="375" r="15" fill="#1E3A8A" stroke="white" stroke-width="1.8"/></g>
+            <text x="232" y="371" text-anchor="middle" font-size="6" font-weight="700" fill="white" font-family="sans-serif">MUGENZI</text>
+            <text x="232" y="380" text-anchor="middle" font-size="5.5" fill="rgba(255,255,255,.7)" font-family="sans-serif">CB</text>
+            <rect x="220" y="390" width="24" height="9" rx="2.5" fill="rgba(0,0,0,.45)"/>
+            <text x="232" y="397" text-anchor="middle" font-size="6" fill="white" font-family="sans-serif">#4</text>
+
+            <g filter="url(#shadow1)"><circle cx="305" cy="375" r="15" fill="#1E3A8A" stroke="white" stroke-width="1.8"/></g>
+            <text x="305" y="371" text-anchor="middle" font-size="5.8" font-weight="700" fill="white" font-family="sans-serif">BIZIMANA</text>
+            <text x="305" y="380" text-anchor="middle" font-size="5.5" fill="rgba(255,255,255,.7)" font-family="sans-serif">LB</text>
+            <rect x="293" y="390" width="24" height="9" rx="2.5" fill="rgba(0,0,0,.45)"/>
+            <text x="305" y="397" text-anchor="middle" font-size="6" fill="white" font-family="sans-serif">#3</text>
+
+            <!-- MID 4 -->
+            <g filter="url(#shadow1)"><circle cx="58" cy="278" r="15" fill="#15803d" stroke="white" stroke-width="1.8"/></g>
+            <text x="58" y="274" text-anchor="middle" font-size="5.8" font-weight="700" fill="white" font-family="sans-serif">TUYISENGE</text>
+            <text x="58" y="283" text-anchor="middle" font-size="5.5" fill="rgba(255,255,255,.7)" font-family="sans-serif">RM</text>
+            <rect x="46" y="293" width="24" height="9" rx="2.5" fill="rgba(0,0,0,.45)"/>
+            <text x="58" y="300" text-anchor="middle" font-size="6" fill="white" font-family="sans-serif">#8</text>
+
+            <g filter="url(#shadow1)"><circle cx="135" cy="268" r="15" fill="#15803d" stroke="white" stroke-width="1.8"/></g>
+            <text x="135" y="264" text-anchor="middle" font-size="5.8" font-weight="700" fill="white" font-family="sans-serif">NZAMWITA</text>
+            <text x="135" y="273" text-anchor="middle" font-size="5.5" fill="rgba(255,255,255,.7)" font-family="sans-serif">CM</text>
+            <rect x="123" y="283" width="24" height="9" rx="2.5" fill="rgba(0,0,0,.45)"/>
+            <text x="135" y="290" text-anchor="middle" font-size="6" fill="white" font-family="sans-serif">#6</text>
+
+            <g filter="url(#shadow1)"><circle cx="225" cy="268" r="15" fill="#15803d" stroke="white" stroke-width="1.8"/></g>
+            <text x="225" y="264" text-anchor="middle" font-size="5.5" font-weight="700" fill="white" font-family="sans-serif">GATETE</text>
+            <text x="225" y="273" text-anchor="middle" font-size="5.5" fill="rgba(255,255,255,.7)" font-family="sans-serif">CM</text>
+            <rect x="213" y="283" width="24" height="9" rx="2.5" fill="rgba(0,0,0,.45)"/>
+            <text x="225" y="290" text-anchor="middle" font-size="6" fill="white" font-family="sans-serif">#10</text>
+
+            <g filter="url(#shadow1)"><circle cx="302" cy="278" r="15" fill="#15803d" stroke="white" stroke-width="1.8"/></g>
+            <text x="302" y="274" text-anchor="middle" font-size="5.5" font-weight="700" fill="white" font-family="sans-serif">HABIYAR.</text>
+            <text x="302" y="283" text-anchor="middle" font-size="5.5" fill="rgba(255,255,255,.7)" font-family="sans-serif">LM</text>
+            <rect x="290" y="293" width="24" height="9" rx="2.5" fill="rgba(0,0,0,.45)"/>
+            <text x="302" y="300" text-anchor="middle" font-size="6" fill="white" font-family="sans-serif">#7</text>
+
+            <!-- FWD 2 -->
+            <g filter="url(#shadow1)"><circle cx="128" cy="162" r="15" fill="#dc2626" stroke="white" stroke-width="1.8"/></g>
+            <text x="128" y="158" text-anchor="middle" font-size="6.2" font-weight="700" fill="white" font-family="sans-serif">UWAYO</text>
+            <text x="128" y="167" text-anchor="middle" font-size="5.5" fill="rgba(255,255,255,.7)" font-family="sans-serif">ST</text>
+            <rect x="116" y="177" width="24" height="9" rx="2.5" fill="rgba(0,0,0,.45)"/>
+            <text x="128" y="184" text-anchor="middle" font-size="6" fill="white" font-family="sans-serif">#9</text>
+
+            <g filter="url(#shadow1)"><circle cx="232" cy="162" r="15" fill="#dc2626" stroke="white" stroke-width="1.8"/></g>
+            <text x="232" y="158" text-anchor="middle" font-size="5.5" font-weight="700" fill="white" font-family="sans-serif">NSANZIM.</text>
+            <text x="232" y="167" text-anchor="middle" font-size="5.5" fill="rgba(255,255,255,.7)" font-family="sans-serif">ST</text>
+            <rect x="220" y="177" width="24" height="9" rx="2.5" fill="rgba(0,0,0,.45)"/>
+            <text x="232" y="184" text-anchor="middle" font-size="6" fill="white" font-family="sans-serif">#11</text>
+
+            <!-- Legend -->
+            <rect x="22" y="484" width="316" height="14" rx="3" fill="rgba(0,0,0,.25)"/>
+            <circle cx="35" cy="491" r="5" fill="#F97316"/><text x="43" y="495" font-size="7" fill="rgba(255,255,255,.6)" font-family="sans-serif" font-weight="600">GK</text>
+            <circle cx="72" cy="491" r="5" fill="#1E3A8A"/><text x="80" y="495" font-size="7" fill="rgba(255,255,255,.6)" font-family="sans-serif" font-weight="600">DEF</text>
+            <circle cx="112" cy="491" r="5" fill="#15803d"/><text x="120" y="495" font-size="7" fill="rgba(255,255,255,.6)" font-family="sans-serif" font-weight="600">MID</text>
+            <circle cx="151" cy="491" r="5" fill="#dc2626"/><text x="159" y="495" font-size="7" fill="rgba(255,255,255,.6)" font-family="sans-serif" font-weight="600">FWD</text>
+          </svg>
+        </div>
+
+      </div>
+
+      <!-- SIDEBAR -->
+      <div class="pitch-info">
+        <!-- Team header -->
+        <div class="pi-team-hd" id="pi-team-hd">
+          <div class="pi-team-logo"><img id="pi-team-img" src="https://images.unsplash.com/photo-1587329310690-91114ac008f0?w=50&q=80" alt=""/></div>
+          <span class="pi-team-label" id="pi-team-name">APR FC</span>
+          <span class="pi-formation-badge" id="pi-formation-badge">4-3-3</span>
+        </div>
+        <!-- Legend -->
+        <div class="pi-legend">
+          <div class="pi-legend-item"><div class="pi-legend-dot" style="background:#F97316"></div>GK</div>
+          <div class="pi-legend-item"><div class="pi-legend-dot" style="background:#1E3A8A"></div>DEF</div>
+          <div class="pi-legend-item"><div class="pi-legend-dot" style="background:#15803d"></div>MID</div>
+          <div class="pi-legend-item"><div class="pi-legend-dot" style="background:#dc2626"></div>FWD</div>
+        </div>
+        <!-- Players list -->
+        <div class="pi-pl" id="pi-players-list"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- TOP PLAYERS -->
+<section style="background:var(--off)">
+  <div class="sec-hd">
+    <div><div class="sec-t">Top Rated <span>Players</span></div><div class="sec-sub">Based on match performance ratings</div></div>
+    <a class="sec-lnk" href="login.php" style="text-decoration:none;">Full rankings →</a>
+  </div>
+  <div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap">
+    <button class="btn-p" style="padding:4px 11px;font-size:10px" id="filter-all">All</button>
+    <button class="btn-s" style="padding:4px 11px;font-size:10px;color:var(--text);border-color:var(--gray-l)" id="filter-gk">Goalkeepers</button>
+    <button class="btn-s" style="padding:4px 11px;font-size:10px;color:var(--text);border-color:var(--gray-l)" id="filter-def">Defenders</button>
+    <button class="btn-s" style="padding:4px 11px;font-size:10px;color:var(--text);border-color:var(--gray-l)" id="filter-mid">Midfielders</button>
+    <button class="btn-s" style="padding:4px 11px;font-size:10px;color:var(--text);border-color:var(--gray-l)" id="filter-fwd">Forwards</button>
+  </div>
+  <div class="players-grid" id="players-grid">
+    <?php if (empty($topPlayers)): ?>
+      <div class="empty-state" style="color:var(--text3);text-align:center;padding:20px;">No ranked players.</div>
+    <?php else: ?>
+      <?php foreach ($topPlayers as $pl): 
+        $posType = mapPositionType($pl['position']);
+        $posAbbrev = mapPositionAbbrev($pl['position']);
+        $pClass = $posType === 'gk' ? 'gk-b' : ($posType === 'def' ? 'def-b' : ($posType === 'mid' ? 'mid-b' : 'fwd-b'));
+        $pColor = $posType === 'gk' ? '#F97316' : ($posType === 'def' ? '#1E3A8A' : ($posType === 'mid' ? '#15803d' : '#dc2626'));
+      ?>
+      <div class="player-card" data-pos="<?= $posType; ?>">
+        <div class="pc-img">
+          <img src="<?= e($pl['photo_pl'] ?: 'https://images.unsplash.com/photo-1627483297886-49710ae1fc22?w=300&q=80'); ?>" alt=""/>
+          <div class="pc-img-ov" style="background:linear-gradient(to top,<?= $pColor; ?>bb,transparent)"></div>
+        </div>
+        <div class="pc-pos-bar" style="background:<?= $pColor; ?>"></div>
+        <div class="pc-body">
+          <div class="pc-avatar-wrap">
+            <img src="<?= e($pl['photo_pl'] ?: 'https://images.unsplash.com/photo-1627483297886-49710ae1fc22?w=100&q=80'); ?>" alt="Avatar"/>
+          </div>
+          <div class="pc-name"><?= e($pl['first_name'] . ' ' . substr($pl['last_name'], 0, 1) . '.'); ?></div>
+          <div class="pc-team"><?= e($pl['team_name']); ?></div>
+          <div class="pc-rating"><?= (int) $pl['average_rating']; ?><span>/100</span></div>
+          <span class="pc-pos-badge <?= $pClass; ?>"><?= $posAbbrev; ?></span>
+          <div class="pc-bar-wrap">
+            <div class="pc-bar-fill" style="width:<?= (int) $pl['average_rating']; ?>%;background:<?= $pColor; ?>"></div>
+          </div>
+        </div>
+      </div>
+      <?php endforeach; ?>
+    <?php endif; ?>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- GALLERY STRIP -->
+<section style="padding:16px 20px">
+  <div class="gallery-strip">
+    <div class="g1"><img src="https://images.unsplash.com/photo-1574629810360-7efbbe195018?w=700&q=80" alt="Stadium"/><div class="g-ov"></div><div class="g-label">Amahoro Stadium</div></div>
+    <div class="g2"><img src="https://images.unsplash.com/photo-1519766304817-4f37bda74a26?w=400&q=80" alt="Action"/><div class="g-ov"></div><div class="g-label">Match Action</div></div>
+    <div class="g3"><img src="https://images.unsplash.com/photo-1560272564-c83b66b1ad12?w=400&q=80" alt="Trophy"/><div class="g-ov"></div><div class="g-label">Season Highlights</div></div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- NEWS -->
+<section>
+  <div class="sec-hd">
+    <div><div class="sec-t">Federation <span>News</span></div><div class="sec-sub">Official announcements & updates</div></div>
+    <a class="sec-lnk" href="login.php" style="text-decoration:none;">All news →</a>
+  </div>
+  <div class="news-grid">
+    <?php if ($mainNews): ?>
+    <div class="news-main">
+      <div class="news-main-img">
+        <img src="<?= e($mainNews['cover_image'] ?: 'https://images.unsplash.com/photo-1522778119026-d647f0596c20?w=700&q=80'); ?>" alt="News"/>
+        <div class="news-img-ov"></div>
+        <div class="news-img-content">
+          <span class="news-cat">Official</span>
+          <div class="news-title"><?= e($mainNews['title']); ?></div>
+        </div>
+      </div>
+      <div class="news-body-pad"><div class="news-meta"><?= date('M d, Y', strtotime($mainNews['published_at'] ?: $mainNews['created_at'])); ?> &nbsp;•&nbsp; Rwanda Football Federation</div></div>
+    </div>
+    <?php endif; ?>
+    
+    <div class="news-list">
+      <?php if (empty($subNews)): ?>
+        <div class="empty-state" style="color:var(--text3);text-align:center;padding:20px;">No secondary news.</div>
+      <?php else: ?>
+        <?php foreach ($subNews as $n): ?>
+        <div class="news-item">
+          <div class="ni-img"><img src="<?= e($n['cover_image'] ?: 'https://images.unsplash.com/photo-1574629810360-7efbbe195018?w=150&q=70'); ?>" alt=""/></div>
+          <div class="ni-body">
+            <div class="ni-cat">Update</div>
+            <div class="ni-title"><?= e($n['title']); ?></div>
+            <div class="ni-meta"><?= date('M d, Y', strtotime($n['published_at'] ?: $n['created_at'])); ?></div>
+          </div>
+        </div>
+        <?php endforeach; ?>
+      <?php endif; ?>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- SEARCH -->
+<section style="background:var(--off);padding:20px">
+  <div class="search-sec">
+    <div class="ss-bg"><img src="https://images.unsplash.com/photo-1574629810360-7efbbe195018?w=1200&q=60" alt=""/></div>
+    <div class="ss-ov"></div>
+    <div class="ss-content">
+      <div class="ss-title">Find <span>Players & Teams</span></div>
+      <p class="ss-sub">Search across all registered teams, players and match statistics</p>
+      <div class="search-box">
+        <input class="search-input" type="text" placeholder="Search player, team, or match..." id="main-search"/>
+        <button class="search-btn"><svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>Search</button>
+      </div>
+      <div class="search-tags">
+        <span class="s-tag">Best Goalkeepers</span>
+        <span class="s-tag">Top Defenders</span>
+        <span class="s-tag">Best Midfielders</span>
+        <span class="s-tag">Top Strikers</span>
+        <span class="s-tag">Highest Rated Teams</span>
+        <span class="s-tag">Live Matches</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="footer-top">
+    <div class="footer-brand">
+      <span class="lbt">RWANDA<span style="color:var(--org)">FUTBOL</span></span>
+      <p>The official digital platform of the Rwanda Football Federation for managing professional football operations nationwide.</p>
+    </div>
+    <div class="footer-col"><h4>Quick Links</h4><a href="login.php">Live Matches</a><a href="login.php">Standings</a><a href="login.php">Match Results</a><a href="login.php">Player Stats</a></div>
+    <div class="footer-col"><h4>Teams</h4><a href="login.php">All Teams</a><a href="login.php">Team Profiles</a><a href="login.php">Player Profiles</a><a href="login.php">Lineups</a></div>
+    <div class="footer-col"><h4>Federation</h4><a href="login.php">About Us</a><a href="login.php">Regulations</a><a href="login.php">News</a><a href="login.php">Contact</a></div>
+  </div>
+  <div class="footer-bottom">
+    <span class="footer-copy">© 2026 Rwanda Football Federation. All rights reserved.</span>
+    <div class="footer-socials">
+      <div class="soc"><svg viewBox="0 0 24 24"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/></svg></div>
+      <div class="soc"><svg viewBox="0 0 24 24"><path d="M23 3a10.9 10.9 0 0 1-3.14 1.53 4.48 4.48 0 0 0-7.86 3v1A10.66 10.66 0 0 1 3 4s-4 9 5 13a11.64 11.64 0 0 1-7 2c9 5 20 0 20-11.5a4.5 4.5 0 0 0-.08-.83A7.72 7.72 0 0 0 23 3z"/></svg></div>
+      <div class="soc"><svg viewBox="0 0 24 24"><rect x="2" y="2" width="20" height="20" rx="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/></svg></div>
+      <div class="soc"><svg viewBox="0 0 24 24"><path d="M22.54 6.42a2.78 2.78 0 0 0-1.95-1.95C18.88 4 12 4 12 4s-6.88 0-8.59.47a2.78 2.78 0 0 0-1.95 1.95C1 8.12 1 12 1 12s0 3.88.46 5.58a2.78 2.78 0 0 0 1.95 1.95C5.12 20 12 20 12 20s6.88 0 8.59-.47a2.78 2.78 0 0 0 1.95-1.95C23 15.88 23 12 23 12s0-3.88-.46-5.58z"/><polygon points="9.75 15.02 15.5 12 9.75 8.98 9.75 15.02"/></svg></div>
+    </div>
+  </div>
+</footer>
+
+<script>
+// Dynamic Teams injection from the seeded database!
+const TEAMS = [
+  {
+    name: "APR FC",
+    formation: "4-3-3",
+    color: "#1E3A8A",
+    img: "https://images.unsplash.com/photo-1587329310690-91114ac008f0?w=50&q=80",
+    players: <?php if (!empty($aprDbPlayers)): 
+      $formatted = array_map(function($p) {
+        return [
+          'name' => $p['first_name'] . ' ' . $p['last_name'],
+          'short' => strtoupper(substr($p['first_name'], 0, 3)),
+          'num' => (int) $p['jersey_number'],
+          'pos' => mapPositionAbbrev($p['position']),
+          'posType' => mapPositionType($p['position']),
+          'img' => $p['photo_pl'] ?: 'https://images.unsplash.com/photo-1627483297886-49710ae1fc22?w=60&q=80'
+        ];
+      }, $aprDbPlayers);
+      echo json_encode($formatted);
+    else: ?>
+    [
+      {name:"Nshuti",short:"NSH",num:1,pos:"GK",posType:"gk",img:"https://images.unsplash.com/photo-1627483297886-49710ae1fc22?w=60&q=80"},
+      {name:"Safari",short:"SAF",num:3,pos:"RB",posType:"def",img:"https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?w=60&q=80"},
+      {name:"Hakizimana",short:"HAK",num:5,pos:"CB",posType:"def",img:"https://images.unsplash.com/photo-1543326727-cf6c39e8f84c?w=60&q=80"},
+      {name:"Mutesa",short:"MUT",num:4,pos:"CB",posType:"def",img:"https://images.unsplash.com/photo-1560272564-c83b66b1ad12?w=60&q=80"},
+      {name:"Rugira",short:"RUG",num:12,pos:"LB",posType:"def",img:"https://images.unsplash.com/photo-1508098682722-e99c43a406b2?w=60&q=80"},
+      {name:"Niyibizi",short:"NIY",num:8,pos:"CM",posType:"mid",img:"https://images.unsplash.com/photo-1606925797300-0b35e9d1794e?w=60&q=80"},
+      {name:"Uwimana",short:"UWI",num:6,pos:"DM",posType:"mid",img:"https://images.unsplash.com/photo-1519766304817-4f37bda74a26?w=60&q=80"},
+      {name:"Habimana",short:"HAB",num:10,pos:"CM",posType:"mid",img:"https://images.unsplash.com/photo-1574629810360-7efbbe195018?w=60&q=80"},
+      {name:"Munyaneza",short:"MUN",num:11,pos:"LW",posType:"fwd",img:"https://images.unsplash.com/photo-1459865264687-595d652de67e?w=60&q=80"},
+      {name:"Ndayishim.",short:"NDA",num:9,pos:"ST",posType:"fwd",img:"https://images.unsplash.com/photo-1626248801379-51a0748a5f96?w=60&q=80"},
+      {name:"Iradukunda",short:"IRA",num:7,pos:"RW",posType:"fwd",img:"https://images.unsplash.com/photo-1487466365202-1afdb86c764e?w=60&q=80"},
+    ]
+    <?php endif; ?>,
+    bench: [
+      {name:"Nkurunziza",num:16,pos:"GK"},{name:"Cyuzuzo",num:14,pos:"DEF"},{name:"Ishimwe",num:18,pos:"MID"}
+    ],
+    positions: [
+      {x:170,y:445},{x:55,y:370},{x:125,y:370},{x:220,y:370},{x:290,y:370},
+      {x:90,y:280},{x:170,y:268},{x:255,y:280},
+      {x:78,y:172},{x:170,y:158},{x:265,y:172}
+    ]
+  },
+  {
+    name: "Police FC",
+    formation: "4-4-2",
+    color: "#7c3aed",
+    img: "https://images.unsplash.com/photo-1606925797300-0b35e9d1794e?w=50&q=80",
+    players: <?php if (!empty($policeDbPlayers)): 
+      $formatted = array_map(function($p) {
+        return [
+          'name' => $p['first_name'] . ' ' . $p['last_name'],
+          'short' => strtoupper(substr($p['first_name'], 0, 3)),
+          'num' => (int) $p['jersey_number'],
+          'pos' => mapPositionAbbrev($p['position']),
+          'posType' => mapPositionType($p['position']),
+          'img' => $p['photo_pl'] ?: 'https://images.unsplash.com/photo-1627483297886-49710ae1fc22?w=60&q=80'
+        ];
+      }, $policeDbPlayers);
+      echo json_encode($formatted);
+    else: ?>
+    [
+      {name:"Hakizim.",short:"HKZ",num:1,pos:"GK",posType:"gk",img:"https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?w=60&q=80"},
+      {name:"Nzeyimana",short:"NZE",num:2,pos:"RB",posType:"def",img:"https://images.unsplash.com/photo-1543326727-cf6c39e8f84c?w=60&q=80"},
+      {name:"Karemera",short:"KAR",num:5,pos:"CB",posType:"def",img:"https://images.unsplash.com/photo-1560272564-c83b66b1ad12?w=60&q=80"},
+      {name:"Mugenzi",short:"MUG",num:4,pos:"CB",posType:"def",img:"https://images.unsplash.com/photo-1508098682722-e99c43a406b2?w=60&q=80"},
+      {name:"Bizimana",short:"BIZ",num:3,pos:"LB",posType:"def",img:"https://images.unsplash.com/photo-1627483297886-49710ae1fc22?w=60&q=80"},
+      {name:"Tuyisenge",short:"TUY",num:8,pos:"RM",posType:"mid",img:"https://images.unsplash.com/photo-1606925797300-0b35e9d1794e?w=60&q=80"},
+      {name:"Nzamwita",short:"NZA",num:6,pos:"CM",posType:"mid",img:"https://images.unsplash.com/photo-1519766304817-4f37bda74a26?w=60&q=80"},
+      {name:"Habiyaremye",short:"HBY",num:7,pos:"LM",posType:"mid",img:"https://images.unsplash.com/photo-1574629810360-7efbbe195018?w=60&q=80"},
+      {name:"Gatete",short:"GAT",num:10,pos:"CM",posType:"mid",img:"https://images.unsplash.com/photo-1459865264687-595d652de67e?w=60&q=80"},
+      {name:"Uwayo",short:"UWA",num:9,pos:"ST",posType:"fwd",img:"https://images.unsplash.com/photo-1626248801379-51a0748a5f96?w=60&q=80"},
+      {name:"Nsanzimana",short:"NSN",num:11,pos:"ST",posType:"fwd",img:"https://images.unsplash.com/photo-1487466365202-1afdb86c764e?w=60&q=80"},
+    ]
+    <?php endif; ?>,
+    bench: [
+      {name:"Rugamba",num:13,pos:"GK"},{name:"Ingabire",num:15,pos:"DEF"},{name:"Gahunde",num:17,pos:"MID"}
+    ],
+    positions: [
+      {x:170,y:445},{x:55,y:370},{x:125,y:370},{x:220,y:370},{x:290,y:370},
+      {x:62,y:275},{x:135,y:265},{x:210,y:265},{x:285,y:275},
+      {x:130,y:158},{x:215,y:158}
+    ]
+  }
+];
+
+const POSCOLORS = {gk:"#F97316",def:"#1E3A8A",mid:"#15803d",fwd:"#dc2626"};
+let activeTeam = 0;
+
+function renderSidebar(teamIdx) {
+  const team = TEAMS[teamIdx];
+  document.getElementById('pi-team-img').src = team.img;
+  document.getElementById('pi-team-name').textContent = team.name;
+  document.getElementById('pi-formation-badge').textContent = team.formation;
+  const title = document.getElementById('ps-match-title');
+  title.innerHTML = teamIdx===0 ? 'APR FC <span>vs Police FC</span>' : 'Police FC <span>vs APR FC</span>';
+  const label = document.getElementById('ps-formation-label');
+  label.textContent = 'Formation: ' + team.formation;
+  const list = document.getElementById('pi-players-list');
+  list.innerHTML = '';
+  team.players.forEach(p => {
+    const color = POSCOLORS[p.posType]||'#F97316';
+    const div = document.createElement('div'); div.className='pi-p';
+    div.innerHTML = `<div class="pi-n" style="background:${color}">${p.num}</div><span class="pi-pn">${p.name}</span><span class="pi-ps">${p.pos}</span>`;
+    list.appendChild(div);
+  });
+  list.insertAdjacentHTML('beforeend','<div class="bench-div"></div><div class="bench-lbl">Bench</div>');
+  team.bench.forEach(p => {
+    const div = document.createElement('div'); div.className='pi-p';
+    div.innerHTML = `<div class="pi-n" style="background:rgba(255,255,255,.15)">${p.num}</div><span class="pi-pn">${p.name}</span><span class="pi-ps">${p.pos}</span>`;
+    list.appendChild(div);
+  });
+}
+
+function switchTeam(idx) {
+  activeTeam = idx;
+  document.querySelectorAll('.ps-tab').forEach((t,i) => t.classList.toggle('active', i===idx));
+  document.querySelectorAll('.pitch-panel').forEach((p,i) => p.classList.toggle('hidden', i!==idx));
+  renderSidebar(idx);
+}
+
+document.querySelectorAll('.ps-tab').forEach(tab => {
+  tab.addEventListener('click', () => switchTeam(parseInt(tab.dataset.team)));
+});
+
+document.querySelectorAll('[id^="filter-"]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const f = btn.id.replace('filter-','');
+    document.querySelectorAll('[id^="filter-"]').forEach(b => {
+      b.className = f==='all'&&b.id==='filter-all' ? 'btn-p' : 'btn-s';
+      b.style.cssText = b.className==='btn-p' ? 'padding:4px 11px;font-size:10px' : 'padding:4px 11px;font-size:10px;color:var(--text);border-color:var(--gray-l)';
+    });
+    btn.className = 'btn-p'; btn.style.cssText = 'padding:4px 11px;font-size:10px';
+    document.querySelectorAll('.player-card').forEach(c => {
+      c.style.display = (f==='all'||c.dataset.pos===f) ? '' : 'none';
+    });
+  });
+});
+
+document.querySelectorAll('.s-tag').forEach(tag => {
+  tag.addEventListener('click', () => { document.getElementById('main-search').value = tag.textContent; });
+});
+
+let mins = 67;
+setInterval(() => {
+  mins = Math.min(mins+1,90);
+  const s = mins<90 ? mins+"'" : "FT";
+  const lm = document.getElementById('live-min');
+  const mc = document.getElementById('mc-min');
+  if(lm) lm.textContent = s;
+  if(mc) mc.textContent = s;
+}, 12000);
+
+switchTeam(0);
+</script>
 </body>
 </html>
-

@@ -28,9 +28,11 @@ $groups = [
         'title' => 'Competitions',
         'icon' => 'fa-trophy',
         'items' => [
+            ['competitions', 'Competitions', 'fa-trophy', null],
             ['teams', 'Teams', 'fa-shield-halved', null],
             ['team_registrations', 'Registrations', 'fa-clipboard-check', null],
             ['seasons', 'Seasons', 'fa-calendar-days', null],
+            ['match_scheduling', 'Schedule Match', 'fa-calendar-plus', null],
         ],
     ],
     [
