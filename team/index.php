@@ -34,19 +34,30 @@ if (isset($_POST['mark_all_notifications_read'])) {
     exit;
 }
 
+// Handle dynamic notification polling
+if (isset($_GET['notifications_poll'])) {
+    $userId = (int) ($currentUser['id'] ?? 0);
+    $items = fetch_user_notifications($userId, 8);
+    foreach ($items as &$item) {
+        $item['id'] = (int) $item['id'];
+        $item['is_read'] = (int) $item['is_read'];
+        $item['time_ago'] = notif_time_ago($item['created_at'] ?? '');
+    }
+    unset($item);
+
+    header('Content-Type: application/json');
+    echo json_encode([
+        'success' => true,
+        'unread_count' => unread_notification_count($userId),
+        'notifications' => $items,
+    ]);
+    exit;
+}
+
 // Fetch notifications
 $userId = (int) ($currentUser['id'] ?? 0);
-$notifications = db_fetch_all(
-    'SELECT id, title, type, message, created_at, is_read FROM notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT 8',
-    'i',
-    [$userId]
-);
-$unreadCount = 0;
-foreach ($notifications as $n) {
-    if ((int) $n['is_read'] === 0) {
-        $unreadCount++;
-    }
-}
+$notifications = fetch_user_notifications($userId, 8);
+$unreadCount = unread_notification_count($userId);
 
 $routes = [
     'dashboard' => 'dashboard.php',

@@ -168,30 +168,39 @@ $currentPerms = array_map(static function ($row) { return (int) $row['permission
 </div>
 
 <div class="modal <?= $editRole ? 'active' : ''; ?>" id="roleModal">
-    <div class="modal-content">
+    <div class="modal-content role-editor-modal-content">
         <div class="modal-head">
             <h3><?= $editRole ? 'Edit Role' : 'Create Role'; ?></h3>
             <button type="button" class="btn btn-light btn-sm" data-close-modal>Close</button>
         </div>
         <form method="post">
-            <div class="modal-body">
+            <div class="modal-body role-editor-body">
                 <input type="hidden" name="csrf_token" value="<?= e(csrf_token()); ?>">
                 <input type="hidden" name="action" value="save_role">
                 <input type="hidden" name="id" value="<?= (int) ($editRole['id'] ?? 0); ?>">
-                <div class="form-grid">
-                    <label>Role Name
-                        <input type="text" name="name" required value="<?= e($editRole['name'] ?? ''); ?>">
-                    </label>
-                    <label>Scope
-                        <select name="scope">
-                            <option value="federation" <?= (($editRole['scope'] ?? '') === 'federation') ? 'selected' : ''; ?>>Federation</option>
-                            <option value="club" <?= (($editRole['scope'] ?? '') === 'club') ? 'selected' : ''; ?>>Club</option>
-                            <option value="global" <?= (($editRole['scope'] ?? '') === 'global') ? 'selected' : ''; ?>>Global</option>
-                        </select>
-                    </label>
-                    <label class="full">Description
-                        <textarea name="description" rows="3"><?= e($editRole['description'] ?? ''); ?></textarea>
-                    </label>
+                <div class="role-editor-layout">
+                    <div class="role-editor-aside">
+                        <span class="role-editor-kicker">Access Control</span>
+                        <h4><?= $editRole ? 'Update this role' : 'Create a clean role'; ?></h4>
+                        <p>Define the role name, scope, and a short description so permissions stay easy to understand.</p>
+                    </div>
+                    <div class="role-editor-fields">
+                        <div class="form-grid">
+                            <label>Role Name
+                                <input type="text" name="name" required value="<?= e($editRole['name'] ?? ''); ?>">
+                            </label>
+                            <label>Scope
+                                <select name="scope">
+                                    <option value="federation" <?= (($editRole['scope'] ?? '') === 'federation') ? 'selected' : ''; ?>>Federation</option>
+                                    <option value="club" <?= (($editRole['scope'] ?? '') === 'club') ? 'selected' : ''; ?>>Club</option>
+                                    <option value="global" <?= (($editRole['scope'] ?? '') === 'global') ? 'selected' : ''; ?>>Global</option>
+                                </select>
+                            </label>
+                            <label class="full">Description
+                                <textarea name="description" rows="4"><?= e($editRole['description'] ?? ''); ?></textarea>
+                            </label>
+                        </div>
+                    </div>
                 </div>
             </div>
             <div class="modal-foot">

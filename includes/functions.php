@@ -196,14 +196,171 @@ function log_action($action, $module, $targetType = null, $targetId = null, $old
                 $agent,
             ]
         );
+
+        notify_federation_role_users($action, $module, $targetType, $targetId, $user, $newValues);
     } catch (\Throwable $e) {
         // Logging should never block the main operation
     }
 }
 
+function notification_message_column()
+{
+    return has_column('notifications', 'message') ? 'message' : 'body';
+}
+
+function notification_type_for_module($module)
+{
+    $module = strtolower((string) $module);
+
+    if (in_array($module, ['approvals', 'lineups'], true)) {
+        return 'approval';
+    }
+    if (in_array($module, ['teams', 'team'], true)) {
+        return 'team';
+    }
+    if (in_array($module, ['matches', 'match_results'], true)) {
+        return 'match';
+    }
+    if (in_array($module, ['users', 'roles', 'profile'], true)) {
+        return 'user';
+    }
+    if (in_array($module, ['settings', 'auth'], true)) {
+        return 'warning';
+    }
+
+    return 'info';
+}
+
+function humanize_activity_text($value)
+{
+    $text = str_replace(['_', '-'], ' ', (string) $value);
+    $text = preg_replace('/\s+/', ' ', $text);
+    return ucwords(trim($text));
+}
+
+function activity_notification_content($action, $module, $targetType = null, $targetId = null, $actor = null)
+{
+    $actionText = humanize_activity_text($action);
+    $moduleText = humanize_activity_text($module);
+    $actorName = $actor['full_name'] ?? $actor['username'] ?? 'System';
+    $title = $actionText;
+    $message = $actorName . ' performed ' . strtolower($actionText) . ' in ' . $moduleText . '.';
+
+    if ($targetType || $targetId) {
+        $targetParts = [];
+        if ($targetType) {
+            $targetParts[] = humanize_activity_text($targetType);
+        }
+        if ($targetId) {
+            $targetParts[] = '#' . (int) $targetId;
+        }
+        $message .= ' Target: ' . implode(' ', $targetParts) . '.';
+    }
+
+    return [$title, $message];
+}
+
+function federation_role_user_ids()
+{
+    $rows = db_fetch_all(
+        "SELECT DISTINCT u.id
+         FROM users u
+         INNER JOIN user_roles ur ON ur.user_id = u.id
+         INNER JOIN roles r ON r.id = ur.role_id
+         WHERE u.is_active = 1
+           AND (
+             r.slug IN ('federation-role', 'federation_role', 'federation-admin', 'federation_admin')
+             OR LOWER(r.name) = 'federation role'
+           )"
+    );
+
+    return array_map(static function ($row) {
+        return (int) $row['id'];
+    }, $rows);
+}
+
+function create_notification($userId, $type, $title, $message = '', $extraData = [])
+{
+    $userId = (int) $userId;
+    if ($userId <= 0) {
+        return false;
+    }
+
+    $messageColumn = notification_message_column();
+    $extraJson = !empty($extraData) ? json_encode($extraData) : null;
+    $fields = ['user_id', 'type', 'title', $messageColumn];
+    $placeholders = ['?', '?', '?', '?'];
+    $types = 'isss';
+    $params = [
+        $userId,
+        (string) $type,
+        mb_strimwidth((string) $title, 0, 155, '...'),
+        (string) $message,
+    ];
+
+    if (has_column('notifications', 'extra_data')) {
+        $fields[] = 'extra_data';
+        $placeholders[] = '?';
+        $types .= 's';
+        $params[] = $extraJson;
+    }
+
+    return db_execute(
+        'INSERT INTO notifications (' . implode(', ', $fields) . ') VALUES (' . implode(', ', $placeholders) . ')',
+        $types,
+        $params
+    );
+}
+
+function notify_federation_role_users($action, $module, $targetType = null, $targetId = null, $actor = null, $extraData = [])
+{
+    $recipientIds = federation_role_user_ids();
+    if (empty($recipientIds)) {
+        return;
+    }
+
+    [$title, $message] = activity_notification_content($action, $module, $targetType, $targetId, $actor);
+    $type = notification_type_for_module($module);
+
+    foreach ($recipientIds as $recipientId) {
+        create_notification($recipientId, $type, $title, $message, [
+            'action' => $action,
+            'module' => $module,
+            'target_type' => $targetType,
+            'target_id' => $targetId,
+            'actor_id' => isset($actor['id']) ? (int) $actor['id'] : null,
+            'data' => $extraData,
+        ]);
+    }
+}
+
+function fetch_user_notifications($userId, $limit = 8)
+{
+    $userId = (int) $userId;
+    $limit = max(1, min(30, (int) $limit));
+    $messageColumn = notification_message_column();
+
+    return db_fetch_all(
+        "SELECT id, title, type, {$messageColumn} AS message, created_at, is_read
+         FROM notifications
+         WHERE user_id = ?
+         ORDER BY created_at DESC
+         LIMIT {$limit}",
+        'i',
+        [$userId]
+    );
+}
+
+function unread_notification_count($userId)
+{
+    return db_table_count('notifications', 'user_id = ? AND is_read = 0', 'i', [(int) $userId]);
+}
+
 function ensure_default_roles()
 {
     $defaultRoles = [
+        ['Federation Role', 'federation-role', 'federation', 'Master role with access to all federations'],
+        ['Team Role', 'team-role', 'club', 'Master role with access to teams, players, and everything related to the team'],
         ['Federation Admin', 'federation-admin', 'federation', 'Full federation control'],
         ['Team Manager', 'team-manager', 'club', 'Manage team operations'],
         ['Coach', 'coach', 'club', 'Training and lineup access'],

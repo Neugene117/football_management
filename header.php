@@ -1,13 +1,8 @@
 ﻿<?php
 $settings = $settings ?? load_system_settings();
 $user = current_user();
-$notifications = db_fetch_all('SELECT id, title, type, created_at, is_read FROM notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT 6', 'i', [$user['id'] ?? 0]);
-$unreadCount = 0;
-foreach ($notifications as $n) {
-    if ((int) $n['is_read'] === 0) {
-        $unreadCount++;
-    }
-}
+$notifications = fetch_user_notifications((int) ($user['id'] ?? 0), 6);
+$unreadCount = unread_notification_count((int) ($user['id'] ?? 0));
 ?>
 <!DOCTYPE html>
 <html lang="en">

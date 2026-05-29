@@ -117,55 +117,182 @@
      NOTIFICATION SYSTEM
   ═══════════════════════════════ */
 
-  // Mark single notification as read
-  document.querySelectorAll('.notif-item[data-notif-id]').forEach((item) => {
-    item.addEventListener('click', function () {
-      const notifId = this.dataset.notifId;
-      if (!notifId || !this.classList.contains('unread')) return;
+  const notifList = document.getElementById('notifList');
+  const notifDropdown = document.getElementById('notifDropdown');
 
-      // Optimistic UI update
-      this.classList.remove('unread');
-      this.classList.add('read-transition');
-      const dot = this.querySelector('.notif-dot');
-      if (dot) {
-        dot.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
-        dot.style.opacity = '0';
-        dot.style.transform = 'scale(0)';
-        setTimeout(() => dot.remove(), 300);
-      }
+  function escapeHtml(value) {
+    return String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
 
-      // Update badge count
-      updateBadgeCount(-1);
+  function notificationIcon(type) {
+    const icons = {
+      info: 'fa-circle-info',
+      success: 'fa-circle-check',
+      warning: 'fa-triangle-exclamation',
+      error: 'fa-circle-xmark',
+      approval: 'fa-clipboard-check',
+      team: 'fa-shield-halved',
+      match: 'fa-futbol',
+      user: 'fa-user-plus',
+    };
+    return icons[type] || icons.info;
+  }
 
-      // Send AJAX request
-      const formData = new FormData();
-      formData.append('mark_notification_read', '1');
-      formData.append('notification_id', notifId);
+  function notificationColor(type) {
+    const colors = {
+      info: 'notif-info',
+      success: 'notif-success',
+      warning: 'notif-warning',
+      error: 'notif-error',
+      approval: 'notif-approval',
+      team: 'notif-team',
+      match: 'notif-match',
+      user: 'notif-user',
+    };
+    return colors[type] || colors.info;
+  }
 
-      fetch(window.location.pathname, {
-        method: 'POST',
-        body: formData,
-      }).catch(() => {
-        // Revert on failure
-        this.classList.add('unread');
-        this.classList.remove('read-transition');
-        updateBadgeCount(1);
-      });
+  function renderNotificationItem(item) {
+    const isUnread = parseInt(item.is_read, 10) === 0;
+    const type = item.type || 'info';
+    const message = item.message
+      ? `<p class="notif-message">${escapeHtml(String(item.message).slice(0, 120))}</p>`
+      : '';
+    const dot = isUnread ? '<span class="notif-dot"></span>' : '';
+
+    return `
+      <div class="notif-item ${isUnread ? 'unread' : ''} ${notificationColor(type)}"
+           data-notif-id="${escapeHtml(item.id)}"
+           role="button" tabindex="0">
+        <div class="notif-icon-wrap">
+          <i class="fa-solid ${notificationIcon(type)}"></i>
+        </div>
+        <div class="notif-content">
+          <p class="notif-title">${escapeHtml(item.title)}</p>
+          ${message}
+          <span class="notif-time">
+            <i class="fa-regular fa-clock"></i>
+            ${escapeHtml(item.time_ago || 'Just now')}
+          </span>
+        </div>
+        ${dot}
+      </div>`;
+  }
+
+  function renderNotifications(items) {
+    if (!notifList) return;
+
+    if (!items || items.length === 0) {
+      notifList.innerHTML = `
+        <div class="notif-empty">
+          <i class="fa-regular fa-bell-slash"></i>
+          <p>No notifications yet</p>
+        </div>`;
+      return;
+    }
+
+    notifList.innerHTML = items.map(renderNotificationItem).join('');
+  }
+
+  function ensureMarkAllButton(count) {
+    const header = document.querySelector('.notif-header');
+    if (!header) return;
+
+    let markAll = document.getElementById('markAllRead');
+    if (count > 0 && !markAll) {
+      markAll = document.createElement('button');
+      markAll.className = 'notif-mark-all';
+      markAll.id = 'markAllRead';
+      markAll.type = 'button';
+      markAll.textContent = 'Mark all read';
+      header.appendChild(markAll);
+      bindMarkAllButton(markAll);
+    } else if (count <= 0 && markAll) {
+      markAll.remove();
+    }
+  }
+
+  function setBadgeCount(count) {
+    const button = notifDropdown ? notifDropdown.querySelector('.topbar-action-item') : null;
+    let badge = document.getElementById('notifBadge');
+
+    if (count <= 0) {
+      if (badge) badge.remove();
+      ensureMarkAllButton(0);
+      return;
+    }
+
+    if (!badge && button) {
+      badge = document.createElement('span');
+      badge.className = 'topbar-badge';
+      badge.id = 'notifBadge';
+      button.appendChild(badge);
+    }
+
+    if (badge) {
+      badge.textContent = count;
+      badge.classList.add('badge-pulse');
+      setTimeout(() => badge.classList.remove('badge-pulse'), 400);
+    }
+
+    ensureMarkAllButton(count);
+  }
+
+  function markNotificationRead(item) {
+    const notifId = item.dataset.notifId;
+    if (!notifId || !item.classList.contains('unread')) return;
+
+    item.classList.remove('unread');
+    item.classList.add('read-transition');
+    const dot = item.querySelector('.notif-dot');
+    if (dot) {
+      dot.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
+      dot.style.opacity = '0';
+      dot.style.transform = 'scale(0)';
+      setTimeout(() => dot.remove(), 300);
+    }
+
+    updateBadgeCount(-1);
+
+    const formData = new FormData();
+    formData.append('mark_notification_read', '1');
+    formData.append('notification_id', notifId);
+
+    fetch(window.location.pathname, {
+      method: 'POST',
+      body: formData,
+    }).catch(() => {
+      item.classList.add('unread');
+      item.classList.remove('read-transition');
+      updateBadgeCount(1);
+    });
+  }
+
+  if (notifList) {
+    notifList.addEventListener('click', (e) => {
+      const item = e.target.closest('.notif-item[data-notif-id]');
+      if (item) markNotificationRead(item);
     });
 
-    // Keyboard support
-    item.addEventListener('keydown', function (e) {
-      if (e.key === 'Enter' || e.key === ' ') {
-        e.preventDefault();
-        this.click();
-      }
+    notifList.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      const item = e.target.closest('.notif-item[data-notif-id]');
+      if (!item) return;
+      e.preventDefault();
+      markNotificationRead(item);
     });
-  });
+  }
 
   // Mark all notifications as read
-  const markAllBtn = document.getElementById('markAllRead');
-  if (markAllBtn) {
-    markAllBtn.addEventListener('click', function () {
+  function bindMarkAllButton(button) {
+    if (!button || button.dataset.bound === '1') return;
+    button.dataset.bound = '1';
+    button.addEventListener('click', function () {
       const unreadItems = document.querySelectorAll('.notif-item.unread');
 
       // Optimistic UI update
@@ -211,32 +338,32 @@
     });
   }
 
+  bindMarkAllButton(document.getElementById('markAllRead'));
+
   function updateBadgeCount(delta) {
     const badge = document.getElementById('notifBadge');
-    if (!badge) return;
-
-    let count = parseInt(badge.textContent, 10) || 0;
+    let count = badge ? parseInt(badge.textContent, 10) || 0 : 0;
     count = Math.max(0, count + delta);
+    setBadgeCount(count);
+  }
 
-    if (count <= 0) {
-      badge.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
-      badge.style.opacity = '0';
-      badge.style.transform = 'scale(0)';
-      setTimeout(() => badge.remove(), 300);
+  function pollNotifications() {
+    if (!notifList) return;
 
-      // Also hide mark all button
-      const markAll = document.getElementById('markAllRead');
-      if (markAll) {
-        markAll.style.transition = 'opacity 0.3s ease';
-        markAll.style.opacity = '0';
-        setTimeout(() => markAll.remove(), 300);
-      }
-    } else {
-      badge.textContent = count;
-      // Pulse animation
-      badge.classList.add('badge-pulse');
-      setTimeout(() => badge.classList.remove('badge-pulse'), 400);
-    }
+    fetch(`${window.location.pathname}?notifications_poll=1`, {
+      headers: { Accept: 'application/json' },
+    })
+      .then((response) => response.ok ? response.json() : null)
+      .then((payload) => {
+        if (!payload || !payload.success) return;
+        renderNotifications(payload.notifications || []);
+        setBadgeCount(parseInt(payload.unread_count, 10) || 0);
+      })
+      .catch(() => {});
+  }
+
+  if (notifList) {
+    setInterval(pollNotifications, 15000);
   }
 
   /* ═══════════════════════════════
@@ -393,6 +520,59 @@
     const values = (cv.dataset.values || '').split(',').map((v) => parseFloat(v) || 0);
     drawBarChart(cv, values, '#0b1f3a');
   });
+
+  /* ═══════════════════════════════
+     ROLE SELECTION AUTO-DISABLING
+  ═══════════════════════════════ */
+  function initRoleSelection() {
+    const checkboxes = document.querySelectorAll('.role-checkbox');
+    if (checkboxes.length === 0) return;
+
+    function updateStates() {
+      // Find if any master role is checked
+      let checkedMaster = null;
+      checkboxes.forEach((cb) => {
+        if (cb.checked) {
+          cb.closest('.role-card-item').classList.add('active');
+          if (cb.dataset.isMaster === '1') {
+            checkedMaster = cb;
+          }
+        } else {
+          cb.closest('.role-card-item').classList.remove('active');
+        }
+      });
+
+      if (checkedMaster) {
+        // Disable and uncheck all others
+        checkboxes.forEach((cb) => {
+          if (cb !== checkedMaster) {
+            cb.disabled = true;
+            cb.closest('.role-card-item').classList.add('disabled-role');
+            if (cb.checked) {
+              cb.checked = false;
+              cb.closest('.role-card-item').classList.remove('active');
+            }
+          }
+        });
+      } else {
+        // Enable everything
+        checkboxes.forEach((cb) => {
+          cb.disabled = false;
+          cb.closest('.role-card-item').classList.remove('disabled-role');
+        });
+      }
+    }
+
+    checkboxes.forEach((cb) => {
+      cb.addEventListener('change', updateStates);
+    });
+
+    // Run once on load to initialize state
+    updateStates();
+  }
+
+  // Initialize
+  initRoleSelection();
 
   /* ═══════════════════════════════
      LOADING SPINNER

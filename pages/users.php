@@ -1,6 +1,16 @@
-﻿<?php
-$roles = db_fetch_all('SELECT id, name FROM roles ORDER BY name ASC');
+<?php
+$allRoles = db_fetch_all('SELECT id, name, slug, description FROM roles ORDER BY name ASC');
+$masterRolesList = [];
+$normalRolesList = [];
+foreach ($allRoles as $role) {
+    if (in_array($role['slug'], ['federation-role', 'team-role'], true)) {
+        $masterRolesList[] = $role;
+    } else {
+        $normalRolesList[] = $role;
+    }
+}
 $editing = null;
+$editingRoleIds = [];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!validate_csrf()) {
@@ -17,7 +27,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $phone = trim($_POST['phone'] ?? '');
         $password = $_POST['password'] ?? '';
         $status = (int) ($_POST['status'] ?? 1);
-        $roleId = (int) ($_POST['role_id'] ?? 0);
+        $roleIds = $_POST['role_ids'] ?? [];
         $userType = $_POST['user_type'] ?? 'federation';
 
         if ($fullName === '' || $email === '') {
@@ -34,6 +44,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!$okUpload) {
             set_flash('danger', $photoPath);
             redirect_to('index.php?page=users');
+        }
+
+        // Fetch master role IDs for backend enforcement
+        $masterRoleSlugs = ['federation-role', 'team-role'];
+        $masterRoles = db_fetch_all("SELECT id FROM roles WHERE slug IN ('federation-role', 'team-role')");
+        $masterRoleIds = array_column($masterRoles, 'id');
+
+        $hasMaster = false;
+        $selectedMasterId = 0;
+        foreach ($roleIds as $rId) {
+            if (in_array((int)$rId, $masterRoleIds, true)) {
+                $hasMaster = true;
+                $selectedMasterId = (int)$rId;
+                break;
+            }
         }
 
         if ($id > 0) {
@@ -54,10 +79,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
 
             if ($ok) {
-                if ($roleId > 0) {
-                    $existsRole = db_fetch_one('SELECT id FROM user_roles WHERE user_id = ? AND role_id = ?', 'ii', [$id, $roleId]);
-                    if (!$existsRole) {
-                        db_execute('INSERT INTO user_roles (user_id, role_id, granted_by) VALUES (?, ?, ?)', 'iii', [$id, $roleId, (int) (current_user()['id'] ?? 0)]);
+                // Clear existing user roles
+                db_execute('DELETE FROM user_roles WHERE user_id = ?', 'i', [$id]);
+
+                if ($hasMaster) {
+                    // Only save the master role
+                    db_execute('INSERT INTO user_roles (user_id, role_id, granted_by) VALUES (?, ?, ?)', 'iii', [$id, $selectedMasterId, (int) (current_user()['id'] ?? 0)]);
+                } else {
+                    // Save all normal roles
+                    foreach ($roleIds as $rId) {
+                        $rId = (int) $rId;
+                        if ($rId > 0) {
+                            db_execute('INSERT INTO user_roles (user_id, role_id, granted_by) VALUES (?, ?, ?)', 'iii', [$id, $rId, (int) (current_user()['id'] ?? 0)]);
+                        }
                     }
                 }
 
@@ -85,9 +119,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $ok = db_execute('INSERT INTO users (username, email, password_hash, full_name, profile_photo, phone, user_type, entity_id, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', 'sssssssii', [$username, $email, $hash, $fullName, $photoPath, $phone ?: null, $userType, null, $status]);
             if ($ok) {
                 $userId = db_last_id();
-                if ($roleId > 0) {
-                    db_execute('INSERT INTO user_roles (user_id, role_id, granted_by) VALUES (?, ?, ?)', 'iii', [$userId, $roleId, (int) (current_user()['id'] ?? 0)]);
+
+                if ($hasMaster) {
+                    db_execute('INSERT INTO user_roles (user_id, role_id, granted_by) VALUES (?, ?, ?)', 'iii', [$userId, $selectedMasterId, (int) (current_user()['id'] ?? 0)]);
+                } else {
+                    foreach ($roleIds as $rId) {
+                        $rId = (int) $rId;
+                        if ($rId > 0) {
+                            db_execute('INSERT INTO user_roles (user_id, role_id, granted_by) VALUES (?, ?, ?)', 'iii', [$userId, $rId, (int) (current_user()['id'] ?? 0)]);
+                        }
+                    }
                 }
+
                 log_action('user_created', 'users', 'users', $userId);
                 set_flash('success', 'User created successfully.');
             } else {
@@ -122,6 +165,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 if (!empty($_GET['edit'])) {
     $editing = db_fetch_one('SELECT * FROM users WHERE id = ?', 'i', [(int) $_GET['edit']]);
+    if ($editing) {
+        $userRolesList = db_fetch_all('SELECT role_id FROM user_roles WHERE user_id = ?', 'i', [(int) $editing['id']]);
+        $editingRoleIds = array_column($userRolesList, 'role_id');
+    }
 }
 
 $search = trim($_GET['search'] ?? '');
@@ -226,7 +273,7 @@ $totalItems = (int) ($totalUsersRows['total'] ?? 0);
 </div>
 
 <div class="modal <?= $editing ? 'active' : ''; ?>" id="userModal">
-    <div class="modal-content">
+    <div class="modal-content user-modal-content">
         <div class="modal-head">
             <h3><?= $editing ? 'Edit User' : 'Add User'; ?></h3>
             <button type="button" class="btn btn-light btn-sm" data-close-modal>Close</button>
@@ -236,43 +283,96 @@ $totalItems = (int) ($totalUsersRows['total'] ?? 0);
                 <input type="hidden" name="csrf_token" value="<?= e(csrf_token()); ?>">
                 <input type="hidden" name="action" value="save_user">
                 <input type="hidden" name="id" value="<?= (int) ($editing['id'] ?? 0); ?>">
-                <div class="form-grid">
-                    <label>Full Name
-                        <input type="text" name="full_name" required value="<?= e($editing['full_name'] ?? ''); ?>">
-                    </label>
-                    <label>Email
-                        <input type="email" name="email" required value="<?= e($editing['email'] ?? ''); ?>">
-                    </label>
-                    <label>Phone
-                        <input type="text" name="phone" value="<?= e($editing['phone'] ?? ''); ?>">
-                    </label>
-                    <label>Password <?= $editing ? '(leave empty to keep)' : ''; ?>
-                        <input type="password" name="password" <?= $editing ? '' : 'required'; ?>>
-                    </label>
-                    <label>Role
-                        <select name="role_id">
-                            <option value="">Select role</option>
-                            <?php foreach ($roles as $role): ?>
-                                <option value="<?= (int) $role['id']; ?>"><?= e($role['name']); ?></option>
-                            <?php endforeach; ?>
-                        </select>
-                    </label>
-                    <label>User Type
-                        <select name="user_type">
-                            <option value="federation" <?= (($editing['user_type'] ?? '') === 'federation') ? 'selected' : ''; ?>>Federation</option>
-                            <option value="club" <?= (($editing['user_type'] ?? '') === 'club') ? 'selected' : ''; ?>>Club</option>
-                            <option value="admin" <?= (($editing['user_type'] ?? '') === 'admin') ? 'selected' : ''; ?>>Admin</option>
-                        </select>
-                    </label>
-                    <label>Status
-                        <select name="status">
-                            <option value="1" <?= ((int) ($editing['is_active'] ?? 1) === 1) ? 'selected' : ''; ?>>Active</option>
-                            <option value="0" <?= ((int) ($editing['is_active'] ?? 1) === 0) ? 'selected' : ''; ?>>Suspended</option>
-                        </select>
-                    </label>
-                    <label>Profile Image
-                        <input type="file" name="profile_photo" accept=".jpg,.jpeg,.png,.webp">
-                    </label>
+
+                <div class="modal-landscape-layout">
+                    <!-- Left Side: Basic Info -->
+                    <div class="modal-form-main">
+                        <span class="form-section-title">Basic Information</span>
+                        <div class="form-grid-inner">
+                            <label class="form-label-wrap">Full Name
+                                <input type="text" name="full_name" required value="<?= e($editing['full_name'] ?? ''); ?>">
+                            </label>
+                            <label class="form-label-wrap">Email
+                                <input type="email" name="email" required value="<?= e($editing['email'] ?? ''); ?>">
+                            </label>
+                            <label class="form-label-wrap">Phone
+                                <input type="text" name="phone" value="<?= e($editing['phone'] ?? ''); ?>">
+                            </label>
+                            <label class="form-label-wrap">Password <?= $editing ? '(leave empty to keep)' : ''; ?>
+                                <input type="password" name="password" <?= $editing ? '' : 'required'; ?>>
+                            </label>
+                            <label class="form-label-wrap">User Type
+                                <select name="user_type">
+                                    <option value="federation" <?= (($editing['user_type'] ?? '') === 'federation') ? 'selected' : ''; ?>>Federation</option>
+                                    <option value="club" <?= (($editing['user_type'] ?? '') === 'club') ? 'selected' : ''; ?>>Club</option>
+                                    <option value="admin" <?= (($editing['user_type'] ?? '') === 'admin') ? 'selected' : ''; ?>>Admin</option>
+                                </select>
+                            </label>
+                            <label class="form-label-wrap">Status
+                                <select name="status">
+                                    <option value="1" <?= ((int) ($editing['is_active'] ?? 1) === 1) ? 'selected' : ''; ?>>Active</option>
+                                    <option value="0" <?= ((int) ($editing['is_active'] ?? 1) === 0) ? 'selected' : ''; ?>>Suspended</option>
+                                </select>
+                            </label>
+                            <label class="form-label-wrap full-width">Profile Image
+                                <input type="file" name="profile_photo" accept=".jpg,.jpeg,.png,.webp">
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Right Side: Roles -->
+                    <div class="modal-form-sidebar">
+                        <div class="role-selection-section">
+                            <span class="form-section-title">Roles & Access Control</span>
+
+                            <div class="roles-group-wrap">
+                                <!-- Master Roles -->
+                                <div class="roles-sub-group master-roles-group">
+                                    <h5>Master Roles <span class="badge badge-accent">Main / Single Select</span></h5>
+                                    <div class="roles-grid">
+                                        <?php foreach ($masterRolesList as $role):
+                                            $isChecked = in_array((int)$role['id'], $editingRoleIds, true);
+                                        ?>
+                                            <label class="role-card-item master-role-card <?= $isChecked ? 'active' : ''; ?>">
+                                                <input type="checkbox" name="role_ids[]" value="<?= (int)$role['id']; ?>"
+                                                       data-is-master="1" class="role-checkbox"
+                                                       <?= $isChecked ? 'checked' : ''; ?>>
+                                                <div class="role-card-content">
+                                                    <div class="role-card-header">
+                                                        <i class="fa-solid fa-crown role-crown-icon"></i>
+                                                        <span class="role-name"><?= e($role['name']); ?></span>
+                                                    </div>
+                                                    <span class="role-desc"><?= e($role['description'] ?: 'Full scope access'); ?></span>
+                                                </div>
+                                            </label>
+                                        <?php endforeach; ?>
+                                    </div>
+                                </div>
+
+                                <!-- Normal Roles -->
+                                <div class="roles-sub-group normal-roles-group">
+                                    <h5>Normal Roles <span class="badge badge-info">Multi-Select</span></h5>
+                                    <div class="roles-grid">
+                                        <?php foreach ($normalRolesList as $role):
+                                            $isChecked = in_array((int)$role['id'], $editingRoleIds, true);
+                                        ?>
+                                            <label class="role-card-item normal-role-card <?= $isChecked ? 'active' : ''; ?>">
+                                                <input type="checkbox" name="role_ids[]" value="<?= (int)$role['id']; ?>"
+                                                       data-is-master="0" class="role-checkbox"
+                                                       <?= $isChecked ? 'checked' : ''; ?>>
+                                                <div class="role-card-content">
+                                                    <div class="role-card-header">
+                                                        <span class="role-name"><?= e($role['name']); ?></span>
+                                                    </div>
+                                                    <span class="role-desc"><?= e($role['description'] ?: 'Standard permissions'); ?></span>
+                                                </div>
+                                            </label>
+                                        <?php endforeach; ?>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
             <div class="modal-foot">
