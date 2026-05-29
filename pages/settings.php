@@ -1,9 +1,14 @@
-﻿<?php
+<?php
 $settings = load_system_settings();
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!validate_csrf()) {
         set_flash('danger', 'Invalid request token.');
+        redirect_to('index.php?page=settings');
+    }
+
+    if (!current_user_can('settings.manage')) {
+        set_flash('danger', 'You do not have permission to manage system settings.');
         redirect_to('index.php?page=settings');
     }
 

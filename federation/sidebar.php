@@ -2,6 +2,7 @@
 $current = $page ?? 'dashboard';
 $userCount = (int) db_table_count('users');
 $pendingApprovals = (int) db_table_count('approvals', 'status = ?', 's', ['pending']);
+$pendingPlayers = (int) db_table_count('players', "status = 'inactive'");
 
 $groups = [
     [
@@ -44,6 +45,7 @@ $groups = [
         'title' => 'Player Approvals',
         'icon' => 'fa-user-check',
         'items' => [
+            ['player_registrations_approval', 'Registrations', 'fa-user-plus', $pendingPlayers > 0 ? $pendingPlayers : null],
             ['player_rankings_approval', 'Rankings', 'fa-list-ol', $pendingApprovals > 0 ? $pendingApprovals : null],
             ['player_ratings_approval', 'Ratings', 'fa-star-half-stroke', null],
             ['player_statistics_approval', 'Statistics', 'fa-chart-line', null],
@@ -76,7 +78,13 @@ $groups = [
     <nav class="sidebar-nav sidebar-group-nav">
         <?php foreach ($groups as $group):
             $open = false;
-            foreach ($group['items'] as $item) {
+            $visibleItems = array_values(array_filter($group['items'], static function ($item) {
+                return current_user_can_page($item[0]);
+            }));
+            if (empty($visibleItems)) {
+                continue;
+            }
+            foreach ($visibleItems as $item) {
                 if ($item[0] === $current) {
                     $open = true;
                     break;
@@ -90,7 +98,7 @@ $groups = [
                     <svg class="chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6z"/></svg>
                 </button>
                 <div class="nav-sub">
-                    <?php foreach ($group['items'] as $item): ?>
+                    <?php foreach ($visibleItems as $item): ?>
                         <a class="nav-item <?= $current === $item[0] ? 'active' : ''; ?>" href="index.php?page=<?= e($item[0]); ?>" title="<?= e($item[1]); ?>">
                             <i class="fa-solid <?= e($item[2]); ?> nav-fa" aria-hidden="true"></i>
                             <span><?= e($item[1]); ?></span>
@@ -109,10 +117,12 @@ $groups = [
             <i class="fa-solid fa-circle-user nav-fa" aria-hidden="true"></i>
             <span>Profile</span>
         </a>
-        <a class="nav-item <?= $current === 'settings' ? 'active' : ''; ?>" href="index.php?page=settings">
-            <i class="fa-solid fa-gear nav-fa" aria-hidden="true"></i>
-            <span>Settings</span>
-        </a>
+        <?php if (current_user_can_page('settings')): ?>
+            <a class="nav-item <?= $current === 'settings' ? 'active' : ''; ?>" href="index.php?page=settings">
+                <i class="fa-solid fa-gear nav-fa" aria-hidden="true"></i>
+                <span>Settings</span>
+            </a>
+        <?php endif; ?>
         <a class="nav-item nav-item-logout" href="logout.php">
             <i class="fa-solid fa-right-from-bracket nav-fa" aria-hidden="true"></i>
             <span>Logout</span>

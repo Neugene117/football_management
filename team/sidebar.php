@@ -26,6 +26,7 @@ $groups = [
         'title' => 'Team Operations',
         'icon' => 'fa-users',
         'items' => [
+            ['players', 'Players', 'fa-user-plus', null],
             ['squad', 'Squad Management', 'fa-users', null],
             ['lineups', 'Lineup Submissions', 'fa-clipboard-list', $pendingLineups > 0 ? $pendingLineups : null],
             ['news', 'Federation News', 'fa-newspaper', null],

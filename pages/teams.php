@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 $stadiums = db_fetch_all('SELECT id, name FROM stadiums ORDER BY name ASC');
 $editing = null;
 
@@ -37,6 +37,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $stadium = $stadiumId > 0 ? $stadiumId : null;
 
         if ($id > 0) {
+            if (!current_user_can('teams.edit')) {
+                set_flash('danger', 'You do not have permission to edit teams.');
+                redirect_to('index.php?page=teams');
+            }
+
             $existing = db_fetch_one('SELECT * FROM teams WHERE id = ?', 'i', [$id]);
             if (!$existing) {
                 set_flash('danger', 'Team not found.');
@@ -59,22 +64,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 set_flash('danger', 'Failed to update team.');
             }
         } else {
+            if (!current_user_can('teams.create')) {
+                set_flash('danger', 'You do not have permission to register teams.');
+                redirect_to('index.php?page=teams');
+            }
+
             $done = db_execute(
                 'INSERT INTO teams (federation_id, home_stadium_id, name, slug, short_name, logo, city, country, founded_year, coach_name, is_active, activated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
                 'iissssssisis',
                 [
-                    $federationId,
-                    $stadium,
-                    $name,
-                    $slug,
-                    $shortName ?: null,
-                    $logoPath,
-                    $province ?: null,
-                    'Rwanda',
-                    $foundedYear ?: null,
-                    $coach ?: null,
-                    $isActive,
-                    $isActive ? date('Y-m-d H:i:s') : null,
+                     $federationId,
+                     $stadium,
+                     $name,
+                     $slug,
+                     $shortName ?: null,
+                     $logoPath,
+                     $province ?: null,
+                     'Rwanda',
+                     $foundedYear ?: null,
+                     $coach ?: null,
+                     $isActive,
+                     $isActive ? date('Y-m-d H:i:s') : null,
                 ]
             );
 
@@ -91,6 +101,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if ($action === 'delete_team') {
+        if (!current_user_can('teams.delete')) {
+            set_flash('danger', 'You do not have permission to delete teams.');
+            redirect_to('index.php?page=teams');
+        }
         $id = (int) ($_POST['id'] ?? 0);
         $old = db_fetch_one('SELECT * FROM teams WHERE id = ?', 'i', [$id]);
         if ($old && db_execute('DELETE FROM teams WHERE id = ?', 'i', [$id])) {
@@ -103,6 +117,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if ($action === 'approve_team') {
+        if (!current_user_can('teams.approve')) {
+            set_flash('danger', 'You do not have permission to approve teams.');
+            redirect_to('index.php?page=teams');
+        }
         $id = (int) ($_POST['id'] ?? 0);
         if (db_execute('UPDATE teams SET is_active = 1, activated_at = NOW(), deactivated_at = NULL WHERE id = ?', 'i', [$id])) {
             log_action('team_approved', 'teams', 'teams', $id);
@@ -145,7 +163,9 @@ $totalItems = (int) ($totalTeamsRows['total'] ?? 0);
 <div class="card">
     <div class="card-head">
         <h3>Teams Management</h3>
-        <button type="button" class="btn btn-primary" data-open-modal="#teamModal"><?= icon_svg('add'); ?> Register Team</button>
+        <?php if (current_user_can('teams.create')): ?>
+            <button type="button" class="btn btn-primary" data-open-modal="#teamModal"><?= icon_svg('add'); ?> Register Team</button>
+        <?php endif; ?>
     </div>
     <div class="card-body">
         <div class="toolbar">
@@ -189,8 +209,10 @@ $totalItems = (int) ($totalTeamsRows['total'] ?? 0);
                                 <td><?= status_badge((int) $team['is_active'] === 1 ? 'approved' : 'pending'); ?></td>
                                 <td>
                                     <div class="action-group">
-                                        <a class="btn btn-light btn-sm" href="index.php?page=teams&edit=<?= (int) $team['id']; ?>">Edit</a>
-                                        <?php if ((int) $team['is_active'] === 0): ?>
+                                        <?php if (current_user_can('teams.edit')): ?>
+                                            <a class="btn btn-light btn-sm" href="index.php?page=teams&edit=<?= (int) $team['id']; ?>">Edit</a>
+                                        <?php endif; ?>
+                                        <?php if ((int) $team['is_active'] === 0 && current_user_can('teams.approve')): ?>
                                             <form method="post">
                                                 <input type="hidden" name="csrf_token" value="<?= e(csrf_token()); ?>">
                                                 <input type="hidden" name="action" value="approve_team">
@@ -198,12 +220,14 @@ $totalItems = (int) ($totalTeamsRows['total'] ?? 0);
                                                 <button type="submit" class="btn btn-secondary btn-sm">Approve</button>
                                             </form>
                                         <?php endif; ?>
-                                        <form method="post">
-                                            <input type="hidden" name="csrf_token" value="<?= e(csrf_token()); ?>">
-                                            <input type="hidden" name="action" value="delete_team">
-                                            <input type="hidden" name="id" value="<?= (int) $team['id']; ?>">
-                                            <button type="submit" class="btn btn-danger btn-sm" data-confirm="Delete this team?">Delete</button>
-                                        </form>
+                                        <?php if (current_user_can('teams.delete')): ?>
+                                            <form method="post">
+                                                <input type="hidden" name="csrf_token" value="<?= e(csrf_token()); ?>">
+                                                <input type="hidden" name="action" value="delete_team">
+                                                <input type="hidden" name="id" value="<?= (int) $team['id']; ?>">
+                                                <button type="submit" class="btn btn-danger btn-sm" data-confirm="Delete this team?">Delete</button>
+                                            </form>
+                                        <?php endif; ?>
                                     </div>
                                 </td>
                             </tr>

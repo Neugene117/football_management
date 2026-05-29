@@ -2,8 +2,20 @@
 require_once __DIR__ . '/auth.php';
 
 ensure_default_roles();
+ensure_master_role_permissions();
 $settings = load_system_settings();
 $page = $_GET['page'] ?? 'dashboard';
+
+// Handle fetching role's permissions for role-permission assignment AJAX
+if (isset($_GET['get_role_permissions']) && isset($_GET['role_id'])) {
+    $roleId = (int) $_GET['role_id'];
+    $currentPermRows = db_fetch_all('SELECT permission_id FROM role_permissions WHERE role_id = ?', 'i', [$roleId]);
+    $currentPerms = array_map(static function ($row) { return (int) $row['permission_id']; }, $currentPermRows);
+    header('Content-Type: application/json');
+    echo json_encode(['success' => true, 'permission_ids' => $currentPerms]);
+    exit;
+}
+
 
 // Handle notification mark-as-read AJAX request
 if (isset($_POST['mark_notification_read']) && isset($_POST['notification_id'])) {
@@ -71,6 +83,7 @@ $routes = [
     'player_rankings_approval' => 'player_rankings_approval.php',
     'player_ratings_approval' => 'player_ratings_approval.php',
     'player_statistics_approval' => 'player_statistics_approval.php',
+    'player_registrations_approval' => 'player_registrations_approval.php',
     'stadiums' => 'stadiums.php',
     'seasons' => 'seasons.php',
     'match_results_approval' => 'match_results_approval.php',
@@ -79,6 +92,7 @@ $routes = [
     'news' => 'news.php',
     'activity_logs' => 'activity_logs.php',
     'reports' => 'reports.php',
+    'notifications' => 'notifications.php',
     'settings' => 'settings.php',
     'profile' => 'profile.php',
     'logout' => 'logout.php',
@@ -91,7 +105,10 @@ if (!file_exists($fullPagePath)) {
     $fullPagePath = __DIR__ . '/pages/dashboard.php';
 }
 
-
+$accessDeniedPage = null;
+if (!current_user_can_page($page)) {
+    $accessDeniedPage = $page;
+}
 
 $notifIconMap = [
     'info' => 'fa-circle-info',
@@ -186,11 +203,9 @@ include __DIR__ . '/sidebar.php';
                             <?php endforeach; ?>
                         <?php endif; ?>
                     </div>
-                    <?php if (!empty($notifications)): ?>
-                        <div class="notif-footer">
-                            <a href="index.php?page=activity_logs">View all notifications</a>
-                        </div>
-                    <?php endif; ?>
+                    <div class="notif-footer">
+                        <a href="index.php?page=notifications">View all notifications</a>
+                    </div>
                 </div>
             </div>
 
@@ -229,8 +244,8 @@ include __DIR__ . '/sidebar.php';
     <main class="content <?= $page === 'dashboard' ? 'dashboard-content' : ''; ?>">
         <div class="page-head <?= $page === 'dashboard' ? 'dashboard-head' : ''; ?>">
             <div>
-                <h1><?= e($page === 'dashboard' ? 'Dashboard Overview' : page_title($page)); ?></h1>
-                <p class="muted"><?= e($page === 'dashboard' ? "Welcome back, {$currentUser['full_name']}! Here's what's happening today." : 'Manage federation workflows in one place.'); ?></p>
+                <h1><?= e($accessDeniedPage ? 'Access Restricted' : ($page === 'dashboard' ? 'Dashboard Overview' : page_title($page))); ?></h1>
+                <p class="muted"><?= e($accessDeniedPage ? 'Your assigned role does not include permission to view this page.' : ($page === 'dashboard' ? "Welcome back, {$currentUser['full_name']}! Here's what's happening today." : 'Manage federation workflows in one place.')); ?></p>
             </div>
             <?php if ($page !== 'dashboard'): ?>
                 <div class="breadcrumbs">
@@ -245,7 +260,18 @@ include __DIR__ . '/sidebar.php';
             <div class="alert alert-<?= e($flash['type']); ?>"><?= e($flash['message']); ?></div>
         <?php endforeach; ?>
 
-        <?php include $fullPagePath; ?>
+        <?php if ($accessDeniedPage): ?>
+            <div class="card access-denied-card">
+                <div class="card-body">
+                    <i class="fa-solid fa-lock"></i>
+                    <h3>Permission required</h3>
+                    <p>You do not have access to <?= e(page_title($accessDeniedPage)); ?>. Ask a Federation role administrator to update your role permissions.</p>
+                    <a class="btn btn-primary" href="index.php?page=dashboard">Back to Dashboard</a>
+                </div>
+            </div>
+        <?php else: ?>
+            <?php include $fullPagePath; ?>
+        <?php endif; ?>
     </main>
 </div>
 <?php include __DIR__ . '/footer.php'; ?>

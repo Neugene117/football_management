@@ -62,10 +62,12 @@ $unreadCount = unread_notification_count($userId);
 $routes = [
     'dashboard' => 'dashboard.php',
     'squad' => 'squad.php',
+    'players' => 'players.php',
     'lineups' => 'lineups.php',
     'matches' => 'matches.php',
     'results' => 'results.php',
     'news' => 'news.php',
+    'notifications' => 'notifications.php',
     'profile' => 'profile.php',
 ];
 
@@ -76,9 +78,15 @@ if (!file_exists($fullPagePath)) {
     $fullPagePath = __DIR__ . '/pages/dashboard.php';
 }
 
+$accessDeniedPage = null;
+if (!current_user_can_page($page)) {
+    $accessDeniedPage = $page;
+}
+
 $titles = [
     'dashboard' => 'Team Dashboard',
     'squad' => 'Squad Management',
+    'players' => 'Players',
     'lineups' => 'Lineup Submissions',
     'matches' => 'Match Schedule',
     'results' => 'Match Results',
@@ -179,6 +187,9 @@ include __DIR__ . '/sidebar.php';
                             <?php endforeach; ?>
                         <?php endif; ?>
                     </div>
+                    <div class="notif-footer">
+                        <a href="index.php?page=notifications">View all notifications</a>
+                    </div>
                 </div>
             </div>
             
@@ -215,8 +226,8 @@ include __DIR__ . '/sidebar.php';
     <main class="content <?= $page === 'dashboard' ? 'dashboard-content' : ''; ?>">
         <div class="page-head <?= $page === 'dashboard' ? 'dashboard-head' : ''; ?>">
             <div>
-                <h1><?= e($page === 'dashboard' ? 'Dashboard Overview' : ($titles[$page] ?? 'Team Dashboard')); ?></h1>
-                <p class="muted"><?= e($page === 'dashboard' ? "Welcome back, {$currentUser['full_name']}! Here's what's happening today." : 'Operational tools for team managers and coaches.'); ?></p>
+                <h1><?= e($accessDeniedPage ? 'Access Restricted' : ($page === 'dashboard' ? 'Dashboard Overview' : ($titles[$page] ?? 'Team Dashboard'))); ?></h1>
+                <p class="muted"><?= e($accessDeniedPage ? 'Your assigned role does not include permission to view this page.' : ($page === 'dashboard' ? "Welcome back, {$currentUser['full_name']}! Here's what's happening today." : 'Operational tools for team managers and coaches.')); ?></p>
             </div>
             <?php if ($page !== 'dashboard'): ?>
                 <div class="breadcrumbs">
@@ -229,7 +240,18 @@ include __DIR__ . '/sidebar.php';
             <div class="alert alert-<?= e($flash['type']); ?>"><?= e($flash['message']); ?></div>
         <?php endforeach; ?>
 
-        <?php include $fullPagePath; ?>
+        <?php if ($accessDeniedPage): ?>
+            <div class="card access-denied-card">
+                <div class="card-body">
+                    <i class="fa-solid fa-lock"></i>
+                    <h3>Permission required</h3>
+                    <p>You do not have access to <?= e($titles[$accessDeniedPage] ?? 'this page'); ?>. Ask a Federation role administrator to update your role permissions.</p>
+                    <a class="btn btn-primary" href="index.php?page=dashboard">Back to Dashboard</a>
+                </div>
+            </div>
+        <?php else: ?>
+            <?php include $fullPagePath; ?>
+        <?php endif; ?>
     </main>
 </div>
 <?php include __DIR__ . '/footer.php'; ?>

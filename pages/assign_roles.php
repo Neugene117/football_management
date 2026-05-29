@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!validate_csrf()) {
         set_flash('danger', 'Invalid request token.');
@@ -8,6 +8,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
 
     if ($action === 'assign') {
+        if (!current_user_can('users.assign_role')) {
+            set_flash('danger', 'You do not have permission to assign roles.');
+            redirect_to('index.php?page=assign_roles');
+        }
         $userId = (int) ($_POST['user_id'] ?? 0);
         $roleId = (int) ($_POST['role_id'] ?? 0);
 
@@ -25,6 +29,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if ($action === 'remove') {
+        if (!current_user_can('users.assign_role')) {
+            set_flash('danger', 'You do not have permission to remove role assignments.');
+            redirect_to('index.php?page=assign_roles');
+        }
         $id = (int) ($_POST['id'] ?? 0);
         db_execute('DELETE FROM user_roles WHERE id = ?', 'i', [$id]);
         log_action('role_removed', 'roles', 'user_roles', $id);
@@ -42,29 +50,36 @@ $assignments = db_fetch_all('SELECT ur.id, u.full_name, u.email, r.name AS role_
     <div class="card">
         <div class="card-head"><h3>Assign Role to User</h3></div>
         <div class="card-body">
-            <form method="post" class="form-grid">
-                <input type="hidden" name="csrf_token" value="<?= e(csrf_token()); ?>">
-                <input type="hidden" name="action" value="assign">
-                <label>User
-                    <select name="user_id" required>
-                        <option value="">Select user</option>
-                        <?php foreach ($users as $u): ?>
-                            <option value="<?= (int) $u['id']; ?>"><?= e($u['full_name']); ?> (<?= e($u['email']); ?>)</option>
-                        <?php endforeach; ?>
-                    </select>
-                </label>
-                <label>Role
-                    <select name="role_id" required>
-                        <option value="">Select role</option>
-                        <?php foreach ($roles as $r): ?>
-                            <option value="<?= (int) $r['id']; ?>"><?= e($r['name']); ?></option>
-                        <?php endforeach; ?>
-                    </select>
-                </label>
-                <div class="full">
-                    <button type="submit" class="btn btn-primary">Assign Role</button>
+            <?php if (!current_user_can('users.assign_role')): ?>
+                <div class="empty-state">
+                    <i class="fa-solid fa-lock"></i>
+                    <p>You do not have permission to assign roles.</p>
                 </div>
-            </form>
+            <?php else: ?>
+                <form method="post" class="form-grid">
+                    <input type="hidden" name="csrf_token" value="<?= e(csrf_token()); ?>">
+                    <input type="hidden" name="action" value="assign">
+                    <label>User
+                        <select name="user_id" required>
+                            <option value="">Select user</option>
+                            <?php foreach ($users as $u): ?>
+                                <option value="<?= (int) $u['id']; ?>"><?= e($u['full_name']); ?> (<?= e($u['email']); ?>)</option>
+                            <?php endforeach; ?>
+                        </select>
+                    </label>
+                    <label>Role
+                        <select name="role_id" required>
+                            <option value="">Select role</option>
+                            <?php foreach ($roles as $r): ?>
+                                <option value="<?= (int) $r['id']; ?>"><?= e($r['name']); ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </label>
+                    <div class="full">
+                        <button type="submit" class="btn btn-primary">Assign Role</button>
+                    </div>
+                </form>
+            <?php endif; ?>
         </div>
     </div>
 
@@ -93,12 +108,16 @@ $assignments = db_fetch_all('SELECT ur.id, u.full_name, u.email, r.name AS role_
                                     <td><?= status_badge($a['role_name']); ?></td>
                                     <td><?= e(date('d M Y H:i', strtotime($a['created_at']))); ?></td>
                                     <td>
-                                        <form method="post">
-                                            <input type="hidden" name="csrf_token" value="<?= e(csrf_token()); ?>">
-                                            <input type="hidden" name="action" value="remove">
-                                            <input type="hidden" name="id" value="<?= (int) $a['id']; ?>">
-                                            <button class="btn btn-danger btn-sm" type="submit" data-confirm="Remove this role assignment?">Remove</button>
-                                        </form>
+                                        <?php if (current_user_can('users.assign_role')): ?>
+                                            <form method="post">
+                                                <input type="hidden" name="csrf_token" value="<?= e(csrf_token()); ?>">
+                                                <input type="hidden" name="action" value="remove">
+                                                <input type="hidden" name="id" value="<?= (int) $a['id']; ?>">
+                                                <button class="btn btn-danger btn-sm" type="submit" data-confirm="Remove this role assignment?">Remove</button>
+                                            </form>
+                                        <?php else: ?>
+                                            <span class="badge badge-light"><i class="fa-solid fa-lock"></i> Locked</span>
+                                        <?php endif; ?>
                                     </td>
                                 </tr>
                             <?php endforeach; ?>

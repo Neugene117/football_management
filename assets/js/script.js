@@ -56,8 +56,27 @@
   ═══════════════════════════════ */
   document.querySelectorAll('[data-nav-group]').forEach((btn) => {
     btn.addEventListener('click', () => {
-      const grp = btn.closest('.nav-group');
-      if (grp) grp.classList.toggle('open');
+      const grp = btn.closest('.nav-group, .menu-group');
+      if (!grp) return;
+
+      const isOpening = !grp.classList.contains('open');
+
+      // Close every sibling group first (accordion)
+      const container = grp.parentElement;
+      if (container) {
+        container.querySelectorAll(':scope > .nav-group.open, :scope > .menu-group.open').forEach((sibling) => {
+          if (sibling !== grp) {
+            sibling.classList.remove('open');
+          }
+        });
+      }
+
+      // Toggle the clicked group
+      if (isOpening) {
+        grp.classList.add('open');
+      } else {
+        grp.classList.remove('open');
+      }
     });
   });
 
@@ -574,17 +593,5 @@
   // Initialize
   initRoleSelection();
 
-  /* ═══════════════════════════════
-     LOADING SPINNER
-  ═══════════════════════════════ */
-  const spinner = document.getElementById('loadingSpinner');
-  if (spinner) {
-    window.addEventListener('load', () => {
-      spinner.style.transition = 'opacity 0.4s ease';
-      spinner.style.opacity = '0';
-      setTimeout(() => {
-        spinner.style.display = 'none';
-      }, 400);
-    });
-  }
+
 })();

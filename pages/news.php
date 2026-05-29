@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 $authors = db_fetch_all('SELECT id, full_name FROM users ORDER BY full_name ASC');
 $editing = null;
 
@@ -32,6 +32,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $slug = create_slug($title . '-' . substr((string) time(), -4));
 
         if ($id > 0) {
+            if (!current_user_can('news.edit')) {
+                set_flash('danger', 'You do not have permission to edit news.');
+                redirect_to('index.php?page=news');
+            }
             $existing = db_fetch_one('SELECT * FROM news WHERE id = ?', 'i', [$id]);
             $cover = $thumbPath ?: ($existing['cover_image'] ?? null);
 
@@ -39,6 +43,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             log_action('news_updated', 'news', 'news', $id);
             set_flash('success', 'News updated successfully.');
         } else {
+            if (!current_user_can('news.create')) {
+                set_flash('danger', 'You do not have permission to create news.');
+                redirect_to('index.php?page=news');
+            }
             db_execute('INSERT INTO news (author_id, title, slug, content, cover_image, is_published, published_at) VALUES (?, ?, ?, ?, ?, ?, ?)', 'issssis', [$authorId ?: null, $title, $slug, $description, $thumbPath, $isPublished, $isPublished ? ($publishedDate ?: date('Y-m-d H:i:s')) : null]);
             $nid = db_last_id();
             log_action('news_created', 'news', 'news', $nid);
@@ -49,6 +57,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if ($action === 'delete_news') {
+        if (!current_user_can('news.delete')) {
+            set_flash('danger', 'You do not have permission to delete news.');
+            redirect_to('index.php?page=news');
+        }
         $id = (int) ($_POST['id'] ?? 0);
         db_execute('DELETE FROM news WHERE id = ?', 'i', [$id]);
         log_action('news_deleted', 'news', 'news', $id);
@@ -57,6 +69,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if ($action === 'publish') {
+        if (!current_user_can('news.publish')) {
+            set_flash('danger', 'You do not have permission to publish news.');
+            redirect_to('index.php?page=news');
+        }
         $id = (int) ($_POST['id'] ?? 0);
         db_execute('UPDATE news SET is_published = 1, published_at = NOW() WHERE id = ?', 'i', [$id]);
         log_action('news_published', 'news', 'news', $id);
@@ -75,7 +91,9 @@ $rows = db_fetch_all('SELECT n.*, u.full_name AS author_name FROM news n LEFT JO
 <div class="card">
     <div class="card-head">
         <h3>News Management</h3>
-        <button class="btn btn-primary" data-open-modal="#newsModal"><?= icon_svg('add'); ?> Create News</button>
+        <?php if (current_user_can('news.create')): ?>
+            <button class="btn btn-primary" data-open-modal="#newsModal"><?= icon_svg('add'); ?> Create News</button>
+        <?php endif; ?>
     </div>
     <div class="card-body">
         <div class="table-wrap">
@@ -103,8 +121,10 @@ $rows = db_fetch_all('SELECT n.*, u.full_name AS author_name FROM news n LEFT JO
                                 <td><?= status_badge((int) $row['is_published'] === 1 ? 'published' : 'draft'); ?></td>
                                 <td>
                                     <div class="action-group">
-                                        <a class="btn btn-light btn-sm" href="index.php?page=news&edit=<?= (int) $row['id']; ?>">Edit</a>
-                                        <?php if ((int) $row['is_published'] === 0): ?>
+                                        <?php if (current_user_can('news.edit')): ?>
+                                            <a class="btn btn-light btn-sm" href="index.php?page=news&edit=<?= (int) $row['id']; ?>">Edit</a>
+                                        <?php endif; ?>
+                                        <?php if ((int) $row['is_published'] === 0 && current_user_can('news.publish')): ?>
                                             <form method="post">
                                                 <input type="hidden" name="csrf_token" value="<?= e(csrf_token()); ?>">
                                                 <input type="hidden" name="action" value="publish">
@@ -112,12 +132,14 @@ $rows = db_fetch_all('SELECT n.*, u.full_name AS author_name FROM news n LEFT JO
                                                 <button class="btn btn-secondary btn-sm" type="submit">Publish</button>
                                             </form>
                                         <?php endif; ?>
-                                        <form method="post">
-                                            <input type="hidden" name="csrf_token" value="<?= e(csrf_token()); ?>">
-                                            <input type="hidden" name="action" value="delete_news">
-                                            <input type="hidden" name="id" value="<?= (int) $row['id']; ?>">
-                                            <button class="btn btn-danger btn-sm" type="submit" data-confirm="Delete this news article?">Delete</button>
-                                        </form>
+                                        <?php if (current_user_can('news.delete')): ?>
+                                            <form method="post">
+                                                <input type="hidden" name="csrf_token" value="<?= e(csrf_token()); ?>">
+                                                <input type="hidden" name="action" value="delete_news">
+                                                <input type="hidden" name="id" value="<?= (int) $row['id']; ?>">
+                                                <button class="btn btn-danger btn-sm" type="submit" data-confirm="Delete this news article?">Delete</button>
+                                            </form>
+                                        <?php endif; ?>
                                     </div>
                                 </td>
                             </tr>

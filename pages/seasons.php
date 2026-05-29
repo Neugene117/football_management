@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 $editing = null;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -23,12 +23,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         if ($id > 0) {
+            if (!current_user_can('seasons.edit')) {
+                set_flash('danger', 'You do not have permission to edit seasons.');
+                redirect_to('index.php?page=seasons');
+            }
             $ok = db_execute('UPDATE seasons SET name=?, start_date=?, end_date=?, is_active=? WHERE id=?', 'sssii', [$name, $startDate ?: null, $endDate ?: null, $isActive, $id]);
             if ($ok) {
                 log_action('season_updated', 'seasons', 'seasons', $id);
                 set_flash('success', 'Season updated.');
             }
         } else {
+            if (!current_user_can('seasons.create')) {
+                set_flash('danger', 'You do not have permission to create seasons.');
+                redirect_to('index.php?page=seasons');
+            }
             $ok = db_execute('INSERT INTO seasons (name, start_date, end_date, is_active) VALUES (?, ?, ?, ?)', 'sssi', [$name, $startDate ?: null, $endDate ?: null, $isActive]);
             if ($ok) {
                 $sid = db_last_id();
@@ -40,6 +48,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if ($action === 'activate') {
+        if (!current_user_can('seasons.manage')) {
+            set_flash('danger', 'You do not have permission to activate seasons.');
+            redirect_to('index.php?page=seasons');
+        }
         $id = (int) ($_POST['id'] ?? 0);
         db_execute('UPDATE seasons SET is_active = 0');
         db_execute('UPDATE seasons SET is_active = 1 WHERE id = ?', 'i', [$id]);
@@ -49,6 +61,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if ($action === 'close') {
+        if (!current_user_can('seasons.manage')) {
+            set_flash('danger', 'You do not have permission to close seasons.');
+            redirect_to('index.php?page=seasons');
+        }
         $id = (int) ($_POST['id'] ?? 0);
         db_execute('UPDATE seasons SET is_active = 0 WHERE id = ?', 'i', [$id]);
         log_action('season_closed', 'seasons', 'seasons', $id);
@@ -57,6 +73,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if ($action === 'delete') {
+        if (!current_user_can('seasons.delete')) {
+            set_flash('danger', 'You do not have permission to delete seasons.');
+            redirect_to('index.php?page=seasons');
+        }
         $id = (int) ($_POST['id'] ?? 0);
         db_execute('DELETE FROM seasons WHERE id = ?', 'i', [$id]);
         log_action('season_deleted', 'seasons', 'seasons', $id);
@@ -75,7 +95,9 @@ $rows = db_fetch_all('SELECT * FROM seasons ORDER BY created_at DESC');
 <div class="card">
     <div class="card-head">
         <h3>Seasons Management</h3>
-        <button class="btn btn-primary" data-open-modal="#seasonModal"><?= icon_svg('add'); ?> Add Season</button>
+        <?php if (current_user_can('seasons.create')): ?>
+            <button class="btn btn-primary" data-open-modal="#seasonModal"><?= icon_svg('add'); ?> Add Season</button>
+        <?php endif; ?>
     </div>
     <div class="card-body">
         <div class="table-wrap">
@@ -101,25 +123,34 @@ $rows = db_fetch_all('SELECT * FROM seasons ORDER BY created_at DESC');
                                 <td><?= status_badge((int) $row['is_active'] === 1 ? 'active' : 'closed'); ?></td>
                                 <td>
                                     <div class="action-group">
-                                        <a class="btn btn-light btn-sm" href="index.php?page=seasons&edit=<?= (int) $row['id']; ?>">Edit</a>
-                                        <form method="post">
-                                            <input type="hidden" name="csrf_token" value="<?= e(csrf_token()); ?>">
-                                            <input type="hidden" name="action" value="activate">
-                                            <input type="hidden" name="id" value="<?= (int) $row['id']; ?>">
-                                            <button class="btn btn-secondary btn-sm" type="submit">Activate</button>
-                                        </form>
-                                        <form method="post">
-                                            <input type="hidden" name="csrf_token" value="<?= e(csrf_token()); ?>">
-                                            <input type="hidden" name="action" value="close">
-                                            <input type="hidden" name="id" value="<?= (int) $row['id']; ?>">
-                                            <button class="btn btn-light btn-sm" type="submit">Close</button>
-                                        </form>
-                                        <form method="post">
-                                            <input type="hidden" name="csrf_token" value="<?= e(csrf_token()); ?>">
-                                            <input type="hidden" name="action" value="delete">
-                                            <input type="hidden" name="id" value="<?= (int) $row['id']; ?>">
-                                            <button class="btn btn-danger btn-sm" type="submit" data-confirm="Delete this season?">Delete</button>
-                                        </form>
+                                        <?php if (current_user_can('seasons.edit')): ?>
+                                            <a class="btn btn-light btn-sm" href="index.php?page=seasons&edit=<?= (int) $row['id']; ?>">Edit</a>
+                                        <?php endif; ?>
+                                        <?php if (current_user_can('seasons.manage')): ?>
+                                            <?php if ((int) $row['is_active'] === 0): ?>
+                                                <form method="post">
+                                                    <input type="hidden" name="csrf_token" value="<?= e(csrf_token()); ?>">
+                                                    <input type="hidden" name="action" value="activate">
+                                                    <input type="hidden" name="id" value="<?= (int) $row['id']; ?>">
+                                                    <button class="btn btn-secondary btn-sm" type="submit">Activate</button>
+                                                </form>
+                                            <?php else: ?>
+                                                <form method="post">
+                                                    <input type="hidden" name="csrf_token" value="<?= e(csrf_token()); ?>">
+                                                    <input type="hidden" name="action" value="close">
+                                                    <input type="hidden" name="id" value="<?= (int) $row['id']; ?>">
+                                                    <button class="btn btn-light btn-sm" type="submit">Close</button>
+                                                </form>
+                                            <?php endif; ?>
+                                        <?php endif; ?>
+                                        <?php if (current_user_can('seasons.delete')): ?>
+                                            <form method="post">
+                                                <input type="hidden" name="csrf_token" value="<?= e(csrf_token()); ?>">
+                                                <input type="hidden" name="action" value="delete">
+                                                <input type="hidden" name="id" value="<?= (int) $row['id']; ?>">
+                                                <button class="btn btn-danger btn-sm" type="submit" data-confirm="Delete this season?">Delete</button>
+                                            </form>
+                                        <?php endif; ?>
                                     </div>
                                 </td>
                             </tr>

@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 $matches = db_fetch_all("SELECT m.id, m.match_date, ht.name AS home_team, at.name AS away_team
 FROM matches m
 LEFT JOIN teams ht ON ht.id=m.home_team_id
@@ -8,6 +8,11 @@ ORDER BY m.match_date DESC LIMIT 100");
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!validate_csrf()) {
         set_flash('danger', 'Invalid token.');
+        redirect_to('index.php?page=match_officials');
+    }
+
+    if (!current_user_can('officials.manage')) {
+        set_flash('danger', 'You do not have permission to manage match officials.');
         redirect_to('index.php?page=match_officials');
     }
 
@@ -73,7 +78,9 @@ function official_role_label($role)
 <div class="card">
     <div class="card-head">
         <h3>Match Officials</h3>
-        <button class="btn btn-primary" data-open-modal="#officialModal"><?= icon_svg('add'); ?> Assign Official</button>
+        <?php if (current_user_can('officials.manage')): ?>
+            <button class="btn btn-primary" data-open-modal="#officialModal"><?= icon_svg('add'); ?> Assign Official</button>
+        <?php endif; ?>
     </div>
     <div class="card-body">
         <div class="table-wrap">
@@ -84,7 +91,9 @@ function official_role_label($role)
                         <th>Date</th>
                         <th>Official Name</th>
                         <th>Role</th>
-                        <th>Actions</th>
+                        <?php if (current_user_can('officials.manage')): ?>
+                            <th>Actions</th>
+                        <?php endif; ?>
                     </tr>
                 </thead>
                 <tbody>
@@ -97,17 +106,19 @@ function official_role_label($role)
                                 <td><?= e($r['match_date'] ?: '-'); ?></td>
                                 <td><?= e($r['full_name']); ?></td>
                                 <td><?= status_badge(official_role_label($r['role'])); ?></td>
-                                <td>
-                                    <div class="action-group">
-                                        <a class="btn btn-light btn-sm" href="index.php?page=match_officials&edit=<?= (int) $r['id']; ?>">Edit</a>
-                                        <form method="post">
-                                            <input type="hidden" name="csrf_token" value="<?= e(csrf_token()); ?>">
-                                            <input type="hidden" name="action" value="delete">
-                                            <input type="hidden" name="id" value="<?= (int) $r['id']; ?>">
-                                            <button class="btn btn-danger btn-sm" type="submit" data-confirm="Remove this official?">Delete</button>
-                                        </form>
-                                    </div>
-                                </td>
+                                <?php if (current_user_can('officials.manage')): ?>
+                                    <td>
+                                        <div class="action-group">
+                                            <a class="btn btn-light btn-sm" href="index.php?page=match_officials&edit=<?= (int) $r['id']; ?>">Edit</a>
+                                            <form method="post">
+                                                <input type="hidden" name="csrf_token" value="<?= e(csrf_token()); ?>">
+                                                <input type="hidden" name="action" value="delete">
+                                                <input type="hidden" name="id" value="<?= (int) $r['id']; ?>">
+                                                <button class="btn btn-danger btn-sm" type="submit" data-confirm="Remove this official?">Delete</button>
+                                            </form>
+                                        </div>
+                                    </td>
+                                <?php endif; ?>
                             </tr>
                         <?php endforeach; ?>
                     <?php endif; ?>

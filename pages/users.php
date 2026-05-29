@@ -29,6 +29,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $status = (int) ($_POST['status'] ?? 1);
         $roleIds = $_POST['role_ids'] ?? [];
         $userType = $_POST['user_type'] ?? 'federation';
+        $entityId = $_POST['entity_id'] !== '' && $userType === 'club' ? (int)$_POST['entity_id'] : null;
 
         if ($fullName === '' || $email === '') {
             set_flash('danger', 'Full name and email are required.');
@@ -62,6 +63,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         if ($id > 0) {
+            if (!current_user_can('users.edit')) {
+                set_flash('danger', 'You do not have permission to edit users.');
+                redirect_to('index.php?page=users');
+            }
+
             $existing = db_fetch_one('SELECT * FROM users WHERE id = ?', 'i', [$id]);
             if (!$existing) {
                 set_flash('danger', 'User not found.');
@@ -73,24 +79,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             if ($password !== '') {
                 $hash = password_hash($password, PASSWORD_DEFAULT);
-                $ok = db_execute('UPDATE users SET email=?, full_name=?, phone=?, user_type=?, is_active=?, profile_photo=?, password_hash=?, updated_at=NOW() WHERE id=?', 'ssssissi', [$email, $fullName, $phone ?: null, $userType, $status, $photoToSave, $hash, $id]);
+                $ok = db_execute('UPDATE users SET email=?, full_name=?, phone=?, user_type=?, entity_id=?, is_active=?, profile_photo=?, password_hash=?, updated_at=NOW() WHERE id=?', 'ssssiissi', [$email, $fullName, $phone ?: null, $userType, $entityId, $status, $photoToSave, $hash, $id]);
             } else {
-                $ok = db_execute('UPDATE users SET email=?, full_name=?, phone=?, user_type=?, is_active=?, profile_photo=?, updated_at=NOW() WHERE id=?', 'ssssisi', [$email, $fullName, $phone ?: null, $userType, $status, $photoToSave, $id]);
+                $ok = db_execute('UPDATE users SET email=?, full_name=?, phone=?, user_type=?, entity_id=?, is_active=?, profile_photo=?, updated_at=NOW() WHERE id=?', 'ssssiisi', [$email, $fullName, $phone ?: null, $userType, $entityId, $status, $photoToSave, $id]);
             }
 
             if ($ok) {
-                // Clear existing user roles
-                db_execute('DELETE FROM user_roles WHERE user_id = ?', 'i', [$id]);
+                if ($id === (int) (current_user()['id'] ?? 0)) {
+                    $_SESSION['user'] = db_fetch_one('SELECT * FROM users WHERE id = ?', 'i', [$id]);
+                }
+                if (current_user_can('users.assign_role')) {
+                    // Clear existing user roles
+                    db_execute('DELETE FROM user_roles WHERE user_id = ?', 'i', [$id]);
 
-                if ($hasMaster) {
-                    // Only save the master role
-                    db_execute('INSERT INTO user_roles (user_id, role_id, granted_by) VALUES (?, ?, ?)', 'iii', [$id, $selectedMasterId, (int) (current_user()['id'] ?? 0)]);
-                } else {
-                    // Save all normal roles
-                    foreach ($roleIds as $rId) {
-                        $rId = (int) $rId;
-                        if ($rId > 0) {
-                            db_execute('INSERT INTO user_roles (user_id, role_id, granted_by) VALUES (?, ?, ?)', 'iii', [$id, $rId, (int) (current_user()['id'] ?? 0)]);
+                    if ($hasMaster) {
+                        // Only save the master role
+                        db_execute('INSERT INTO user_roles (user_id, role_id, granted_by) VALUES (?, ?, ?)', 'iii', [$id, $selectedMasterId, (int) (current_user()['id'] ?? 0)]);
+                    } else {
+                        // Save all normal roles
+                        foreach ($roleIds as $rId) {
+                            $rId = (int) $rId;
+                            if ($rId > 0) {
+                                db_execute('INSERT INTO user_roles (user_id, role_id, granted_by) VALUES (?, ?, ?)', 'iii', [$id, $rId, (int) (current_user()['id'] ?? 0)]);
+                            }
                         }
                     }
                 }
@@ -101,6 +112,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 set_flash('danger', 'Failed to update user.');
             }
         } else {
+            if (!current_user_can('users.create')) {
+                set_flash('danger', 'You do not have permission to create users.');
+                redirect_to('index.php?page=users');
+            }
+
             if ($password === '') {
                 set_flash('danger', 'Password is required for new users.');
                 redirect_to('index.php?page=users');
@@ -116,17 +132,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $username = $usernameBase . rand(10, 99);
             $hash = password_hash($password, PASSWORD_DEFAULT);
 
-            $ok = db_execute('INSERT INTO users (username, email, password_hash, full_name, profile_photo, phone, user_type, entity_id, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', 'sssssssii', [$username, $email, $hash, $fullName, $photoPath, $phone ?: null, $userType, null, $status]);
+            $ok = db_execute('INSERT INTO users (username, email, password_hash, full_name, profile_photo, phone, user_type, entity_id, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', 'sssssssii', [$username, $email, $hash, $fullName, $photoPath, $phone ?: null, $userType, $entityId, $status]);
             if ($ok) {
                 $userId = db_last_id();
 
-                if ($hasMaster) {
-                    db_execute('INSERT INTO user_roles (user_id, role_id, granted_by) VALUES (?, ?, ?)', 'iii', [$userId, $selectedMasterId, (int) (current_user()['id'] ?? 0)]);
-                } else {
-                    foreach ($roleIds as $rId) {
-                        $rId = (int) $rId;
-                        if ($rId > 0) {
-                            db_execute('INSERT INTO user_roles (user_id, role_id, granted_by) VALUES (?, ?, ?)', 'iii', [$userId, $rId, (int) (current_user()['id'] ?? 0)]);
+                if (current_user_can('users.assign_role')) {
+                    if ($hasMaster) {
+                        db_execute('INSERT INTO user_roles (user_id, role_id, granted_by) VALUES (?, ?, ?)', 'iii', [$userId, $selectedMasterId, (int) (current_user()['id'] ?? 0)]);
+                    } else {
+                        foreach ($roleIds as $rId) {
+                            $rId = (int) $rId;
+                            if ($rId > 0) {
+                                db_execute('INSERT INTO user_roles (user_id, role_id, granted_by) VALUES (?, ?, ?)', 'iii', [$userId, $rId, (int) (current_user()['id'] ?? 0)]);
+                            }
                         }
                     }
                 }
@@ -142,6 +160,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if ($action === 'delete_user') {
+        if (!current_user_can('users.delete')) {
+            set_flash('danger', 'You do not have permission to delete users.');
+            redirect_to('index.php?page=users');
+        }
         $id = (int) ($_POST['id'] ?? 0);
         $ok = db_execute('DELETE FROM users WHERE id = ?', 'i', [$id]);
         if ($ok) {
@@ -154,6 +176,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if ($action === 'toggle_status') {
+        if (!current_user_can('users.edit')) {
+            set_flash('danger', 'You do not have permission to edit user status.');
+            redirect_to('index.php?page=users');
+        }
         $id = (int) ($_POST['id'] ?? 0);
         $newStatus = (int) ($_POST['new_status'] ?? 0);
         db_execute('UPDATE users SET is_active = ? WHERE id = ?', 'ii', [$newStatus, $id]);
@@ -203,7 +229,9 @@ $totalItems = (int) ($totalUsersRows['total'] ?? 0);
 <div class="card">
     <div class="card-head">
         <h3>Users Management</h3>
-        <button type="button" class="btn btn-primary" data-open-modal="#userModal"><?= icon_svg('add'); ?> Add User</button>
+        <?php if (current_user_can('users.create')): ?>
+            <button type="button" class="btn btn-primary" data-open-modal="#userModal"><?= icon_svg('add'); ?> Add User</button>
+        <?php endif; ?>
     </div>
     <div class="card-body">
         <div class="toolbar">
@@ -245,20 +273,24 @@ $totalItems = (int) ($totalUsersRows['total'] ?? 0);
                                 <td><?= status_badge((int) $u['is_active'] === 1 ? 'active' : 'suspended'); ?></td>
                                 <td>
                                     <div class="action-group">
-                                        <a class="btn btn-light btn-sm" href="index.php?page=users&edit=<?= (int) $u['id']; ?>">Edit</a>
-                                        <form method="post">
-                                            <input type="hidden" name="csrf_token" value="<?= e(csrf_token()); ?>">
-                                            <input type="hidden" name="action" value="toggle_status">
-                                            <input type="hidden" name="id" value="<?= (int) $u['id']; ?>">
-                                            <input type="hidden" name="new_status" value="<?= (int) $u['is_active'] === 1 ? 0 : 1; ?>">
-                                            <button class="btn btn-secondary btn-sm" type="submit"><?= (int) $u['is_active'] === 1 ? 'Suspend' : 'Activate'; ?></button>
-                                        </form>
-                                        <form method="post">
-                                            <input type="hidden" name="csrf_token" value="<?= e(csrf_token()); ?>">
-                                            <input type="hidden" name="action" value="delete_user">
-                                            <input type="hidden" name="id" value="<?= (int) $u['id']; ?>">
-                                            <button class="btn btn-danger btn-sm" type="submit" data-confirm="Delete this user?">Delete</button>
-                                        </form>
+                                        <?php if (current_user_can('users.edit')): ?>
+                                            <a class="btn btn-light btn-sm" href="index.php?page=users&edit=<?= (int) $u['id']; ?>">Edit</a>
+                                            <form method="post">
+                                                <input type="hidden" name="csrf_token" value="<?= e(csrf_token()); ?>">
+                                                <input type="hidden" name="action" value="toggle_status">
+                                                <input type="hidden" name="id" value="<?= (int) $u['id']; ?>">
+                                                <input type="hidden" name="new_status" value="<?= (int) $u['is_active'] === 1 ? 0 : 1; ?>">
+                                                <button class="btn btn-secondary btn-sm" type="submit"><?= (int) $u['is_active'] === 1 ? 'Suspend' : 'Activate'; ?></button>
+                                            </form>
+                                        <?php endif; ?>
+                                        <?php if (current_user_can('users.delete')): ?>
+                                            <form method="post">
+                                                <input type="hidden" name="csrf_token" value="<?= e(csrf_token()); ?>">
+                                                <input type="hidden" name="action" value="delete_user">
+                                                <input type="hidden" name="id" value="<?= (int) $u['id']; ?>">
+                                                <button class="btn btn-danger btn-sm" type="submit" data-confirm="Delete this user?">Delete</button>
+                                            </form>
+                                        <?php endif; ?>
                                     </div>
                                 </td>
                             </tr>
@@ -308,6 +340,17 @@ $totalItems = (int) ($totalUsersRows['total'] ?? 0);
                                     <option value="admin" <?= (($editing['user_type'] ?? '') === 'admin') ? 'selected' : ''; ?>>Admin</option>
                                 </select>
                             </label>
+                            <label class="form-label-wrap" id="teamSelectField">Team Association (Club Users)
+                                <select name="entity_id">
+                                    <option value="">-- None --</option>
+                                    <?php 
+                                    $allTeams = db_fetch_all('SELECT id, name FROM teams ORDER BY name ASC');
+                                    foreach ($allTeams as $team): 
+                                    ?>
+                                        <option value="<?= (int) $team['id']; ?>" <?= ((int)($editing['entity_id'] ?? 0) === (int) $team['id']) ? 'selected' : ''; ?>><?= e($team['name']); ?></option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </label>
                             <label class="form-label-wrap">Status
                                 <select name="status">
                                     <option value="1" <?= ((int) ($editing['is_active'] ?? 1) === 1) ? 'selected' : ''; ?>>Active</option>
@@ -336,7 +379,8 @@ $totalItems = (int) ($totalUsersRows['total'] ?? 0);
                                             <label class="role-card-item master-role-card <?= $isChecked ? 'active' : ''; ?>">
                                                 <input type="checkbox" name="role_ids[]" value="<?= (int)$role['id']; ?>"
                                                        data-is-master="1" class="role-checkbox"
-                                                       <?= $isChecked ? 'checked' : ''; ?>>
+                                                       <?= $isChecked ? 'checked' : ''; ?>
+                                                       <?= !current_user_can('users.assign_role') ? 'disabled' : ''; ?>>
                                                 <div class="role-card-content">
                                                     <div class="role-card-header">
                                                         <i class="fa-solid fa-crown role-crown-icon"></i>
@@ -359,7 +403,8 @@ $totalItems = (int) ($totalUsersRows['total'] ?? 0);
                                             <label class="role-card-item normal-role-card <?= $isChecked ? 'active' : ''; ?>">
                                                 <input type="checkbox" name="role_ids[]" value="<?= (int)$role['id']; ?>"
                                                        data-is-master="0" class="role-checkbox"
-                                                       <?= $isChecked ? 'checked' : ''; ?>>
+                                                       <?= $isChecked ? 'checked' : ''; ?>
+                                                       <?= !current_user_can('users.assign_role') ? 'disabled' : ''; ?>>
                                                 <div class="role-card-content">
                                                     <div class="role-card-header">
                                                         <span class="role-name"><?= e($role['name']); ?></span>
@@ -382,4 +427,22 @@ $totalItems = (int) ($totalUsersRows['total'] ?? 0);
         </form>
     </div>
 </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    var userTypeSelect = document.querySelector('select[name="user_type"]');
+    var teamSelectField = document.getElementById('teamSelectField');
+    if (userTypeSelect && teamSelectField) {
+        function toggleTeamSelect() {
+            if (userTypeSelect.value === 'club') {
+                teamSelectField.style.display = 'block';
+            } else {
+                teamSelectField.style.display = 'none';
+            }
+        }
+        userTypeSelect.addEventListener('change', toggleTeamSelect);
+        toggleTeamSelect(); // Run once initially
+    }
+});
+</script>
 

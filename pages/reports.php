@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 $reportType = $_GET['report'] ?? 'teams';
 $allowedReports = ['teams', 'matches', 'players', 'approvals'];
 if (!in_array($reportType, $allowedReports, true)) {
@@ -6,6 +6,10 @@ if (!in_array($reportType, $allowedReports, true)) {
 }
 
 if (($_GET['export'] ?? '') === 'csv') {
+    if (!current_user_can('reports.export')) {
+        set_flash('danger', 'You do not have permission to export reports.');
+        redirect_to('index.php?page=reports');
+    }
     $filename = $reportType . '_report_' . date('Ymd_His') . '.csv';
     header('Content-Type: text/csv');
     header('Content-Disposition: attachment; filename=' . $filename);
@@ -86,7 +90,9 @@ if ($reportType === 'approvals') {
             <a class="btn btn-light btn-sm" href="index.php?page=reports&report=matches">Matches</a>
             <a class="btn btn-light btn-sm" href="index.php?page=reports&report=players">Players</a>
             <a class="btn btn-light btn-sm" href="index.php?page=reports&report=approvals">Approvals</a>
-            <a class="btn btn-primary btn-sm" href="index.php?page=reports&report=<?= e($reportType); ?>&export=csv">Export CSV</a>
+            <?php if (current_user_can('reports.export')): ?>
+                <a class="btn btn-primary btn-sm" href="index.php?page=reports&report=<?= e($reportType); ?>&export=csv">Export CSV</a>
+            <?php endif; ?>
         </div>
     </div>
     <div class="card-body">

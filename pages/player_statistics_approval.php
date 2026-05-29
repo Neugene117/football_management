@@ -1,9 +1,14 @@
-﻿<?php
+<?php
 $statusCol = pick_status_column('player_statistics') ?: 'status';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!validate_csrf()) {
         set_flash('danger', 'Invalid token.');
+        redirect_to('index.php?page=player_statistics_approval');
+    }
+
+    if (!current_user_can('statistics.approve')) {
+        set_flash('danger', 'You do not have permission to approve/reject player statistics.');
         redirect_to('index.php?page=player_statistics_approval');
     }
 

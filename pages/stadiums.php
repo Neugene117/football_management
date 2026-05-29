@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 $editing = null;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -22,12 +22,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         if ($id > 0) {
+            if (!current_user_can('stadiums.edit')) {
+                set_flash('danger', 'You do not have permission to edit stadiums.');
+                redirect_to('index.php?page=stadiums');
+            }
             $ok = db_execute('UPDATE stadiums SET name=?, city=?, country=?, capacity=?, address=?, updated_at=NOW() WHERE id=?', 'sssisi', [$name, $province ?: null, 'Rwanda', $capacity ?: null, $address ?: null, $id]);
             if ($ok) {
                 log_action('stadium_updated', 'stadiums', 'stadiums', $id);
                 set_flash('success', 'Stadium updated.');
             }
         } else {
+            if (!current_user_can('stadiums.create')) {
+                set_flash('danger', 'You do not have permission to create stadiums.');
+                redirect_to('index.php?page=stadiums');
+            }
             $ok = db_execute('INSERT INTO stadiums (name, city, country, capacity, address) VALUES (?, ?, ?, ?, ?)', 'sssis', [$name, $province ?: null, 'Rwanda', $capacity ?: null, $address ?: null]);
             if ($ok) {
                 $id = db_last_id();
@@ -67,6 +75,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if ($action === 'delete_stadium') {
+        if (!current_user_can('stadiums.delete')) {
+            set_flash('danger', 'You do not have permission to delete stadiums.');
+            redirect_to('index.php?page=stadiums');
+        }
         $id = (int) ($_POST['id'] ?? 0);
         db_execute('DELETE FROM stadiums WHERE id = ?', 'i', [$id]);
         log_action('stadium_deleted', 'stadiums', 'stadiums', $id);
@@ -90,7 +102,9 @@ $rows = db_fetch_all("SELECT s.*, mf.file_path AS image_path
 <div class="card">
     <div class="card-head">
         <h3>Stadium Management</h3>
-        <button class="btn btn-primary" data-open-modal="#stadiumModal"><?= icon_svg('add'); ?> Add Stadium</button>
+        <?php if (current_user_can('stadiums.create')): ?>
+            <button class="btn btn-primary" data-open-modal="#stadiumModal"><?= icon_svg('add'); ?> Add Stadium</button>
+        <?php endif; ?>
     </div>
     <div class="card-body">
         <div class="table-wrap">
@@ -118,13 +132,17 @@ $rows = db_fetch_all("SELECT s.*, mf.file_path AS image_path
                                 <td><?= status_badge('active'); ?></td>
                                 <td>
                                     <div class="action-group">
-                                        <a class="btn btn-light btn-sm" href="index.php?page=stadiums&edit=<?= (int) $row['id']; ?>">Edit</a>
-                                        <form method="post">
-                                            <input type="hidden" name="csrf_token" value="<?= e(csrf_token()); ?>">
-                                            <input type="hidden" name="action" value="delete_stadium">
-                                            <input type="hidden" name="id" value="<?= (int) $row['id']; ?>">
-                                            <button class="btn btn-danger btn-sm" type="submit" data-confirm="Delete this stadium?">Delete</button>
-                                        </form>
+                                        <?php if (current_user_can('stadiums.edit')): ?>
+                                            <a class="btn btn-light btn-sm" href="index.php?page=stadiums&edit=<?= (int) $row['id']; ?>">Edit</a>
+                                        <?php endif; ?>
+                                        <?php if (current_user_can('stadiums.delete')): ?>
+                                            <form method="post">
+                                                <input type="hidden" name="csrf_token" value="<?= e(csrf_token()); ?>">
+                                                <input type="hidden" name="action" value="delete_stadium">
+                                                <input type="hidden" name="id" value="<?= (int) $row['id']; ?>">
+                                                <button class="btn btn-danger btn-sm" type="submit" data-confirm="Delete this stadium?">Delete</button>
+                                            </form>
+                                        <?php endif; ?>
                                     </div>
                                 </td>
                             </tr>

@@ -354,29 +354,168 @@ CREATE TABLE `permissions` (
 --
 
 INSERT INTO `permissions` (`id`, `name`, `slug`, `module`, `description`, `created_at`) VALUES
-(1, 'Create match', 'match.create', 'match', NULL, '2026-05-26 13:52:25'),
-(2, 'Edit match', 'match.edit', 'match', NULL, '2026-05-26 13:52:25'),
-(3, 'Delete match', 'match.delete', 'match', NULL, '2026-05-26 13:52:25'),
-(4, 'View all matches', 'match.view_all', 'match', NULL, '2026-05-26 13:52:25'),
-(5, 'Submit lineup', 'lineup.submit', 'lineup', NULL, '2026-05-26 13:52:25'),
-(6, 'Approve lineup', 'lineup.approve', 'lineup', NULL, '2026-05-26 13:52:25'),
-(7, 'Reject lineup', 'lineup.reject', 'lineup', NULL, '2026-05-26 13:52:25'),
-(8, 'Submit result', 'result.submit', 'result', NULL, '2026-05-26 13:52:25'),
-(9, 'Approve result', 'result.approve', 'result', NULL, '2026-05-26 13:52:25'),
-(10, 'Reject result', 'result.reject', 'result', NULL, '2026-05-26 13:52:25'),
-(11, 'Register player', 'player.create', 'player', NULL, '2026-05-26 13:52:25'),
-(12, 'Edit player', 'player.edit', 'player', NULL, '2026-05-26 13:52:25'),
-(13, 'Delete player', 'player.delete', 'player', NULL, '2026-05-26 13:52:25'),
-(14, 'Activate team', 'team.activate', 'team', NULL, '2026-05-26 13:52:25'),
-(15, 'Deactivate team', 'team.deactivate', 'team', NULL, '2026-05-26 13:52:25'),
-(16, 'Edit team', 'team.edit', 'team', NULL, '2026-05-26 13:52:25'),
-(17, 'Create user', 'user.create', 'user', NULL, '2026-05-26 13:52:25'),
-(18, 'Assign role', 'user.assign_role', 'user', NULL, '2026-05-26 13:52:25'),
-(19, 'Export reports', 'report.export', 'report', NULL, '2026-05-26 13:52:25'),
-(20, 'Publish news', 'news.publish', 'news', NULL, '2026-05-26 13:52:25'),
-(21, 'Upload media', 'media.upload', 'media', NULL, '2026-05-26 13:52:25'),
-(22, 'Rate player', 'player.rate', 'player', NULL, '2026-05-26 13:52:25'),
-(23, 'Manage competition', 'competition.manage', 'competition', NULL, '2026-05-26 13:52:25');
+-- Dashboard
+(1, 'Dashboard Access', 'dashboard.view', 'dashboard', 'Access the main dashboard', '2026-05-26 13:52:25'),
+
+-- Teams
+(2, 'Manage Teams', 'teams.manage', 'teams', 'Full team management access', '2026-05-26 13:52:25'),
+(3, 'Approve Teams', 'teams.approve', 'teams', 'Approve team registrations', '2026-05-26 13:52:25'),
+(4, 'View Teams', 'teams.view', 'teams', 'View team information', '2026-05-26 13:52:25'),
+(5, 'Create Team', 'teams.create', 'teams', 'Register a new team', '2026-05-26 13:52:25'),
+(6, 'Edit Team', 'teams.edit', 'teams', 'Modify team details', '2026-05-26 13:52:25'),
+(7, 'Delete Team', 'teams.delete', 'teams', 'Remove a team from the system', '2026-05-26 13:52:25'),
+(8, 'Activate Team', 'teams.activate', 'teams', 'Activate a registered team', '2026-05-26 13:52:25'),
+(9, 'Deactivate Team', 'teams.deactivate', 'teams', 'Deactivate an active team', '2026-05-26 13:52:25'),
+
+-- Users
+(10, 'Manage Users', 'users.manage', 'users', 'Full user management access', '2026-05-26 13:52:25'),
+(11, 'View Users', 'users.view', 'users', 'View user accounts', '2026-05-26 13:52:25'),
+(12, 'Create User', 'users.create', 'users', 'Create new user accounts', '2026-05-26 13:52:25'),
+(13, 'Edit User', 'users.edit', 'users', 'Modify user account details', '2026-05-26 13:52:25'),
+(14, 'Delete User', 'users.delete', 'users', 'Remove user accounts', '2026-05-26 13:52:25'),
+(15, 'Assign Role', 'users.assign_role', 'users', 'Assign roles to users', '2026-05-26 13:52:25'),
+
+-- Roles & Permissions
+(16, 'Manage Roles & Permissions', 'roles.manage', 'roles', 'Full role and permission management', '2026-05-26 13:52:25'),
+(17, 'View Roles', 'roles.view', 'roles', 'View available roles', '2026-05-26 13:52:25'),
+(18, 'Create Role', 'roles.create', 'roles', 'Create new roles', '2026-05-26 13:52:25'),
+(19, 'Edit Role', 'roles.edit', 'roles', 'Modify existing roles', '2026-05-26 13:52:25'),
+(20, 'Delete Role', 'roles.delete', 'roles', 'Remove roles from the system', '2026-05-26 13:52:25'),
+(21, 'Assign Permissions', 'roles.assign_permissions', 'roles', 'Assign permissions to roles', '2026-05-26 13:52:25'),
+
+-- Players
+(22, 'Manage Players', 'players.manage', 'players', 'Full player management access', '2026-05-26 13:52:25'),
+(23, 'View Players', 'players.view', 'players', 'View player profiles', '2026-05-26 13:52:25'),
+(24, 'Register Player', 'players.create', 'players', 'Register new players', '2026-05-26 13:52:25'),
+(25, 'Edit Player', 'players.edit', 'players', 'Modify player details', '2026-05-26 13:52:25'),
+(26, 'Delete Player', 'players.delete', 'players', 'Remove player records', '2026-05-26 13:52:25'),
+(27, 'Transfer Player', 'players.transfer', 'players', 'Transfer players between teams', '2026-05-26 13:52:25'),
+
+-- Matches
+(28, 'Manage Matches', 'matches.manage', 'matches', 'Full match management access', '2026-05-26 13:52:25'),
+(29, 'View Matches', 'matches.view', 'matches', 'View match schedules and details', '2026-05-26 13:52:25'),
+(30, 'Create Match', 'matches.create', 'matches', 'Schedule a new match', '2026-05-26 13:52:25'),
+(31, 'Edit Match', 'matches.edit', 'matches', 'Modify match details', '2026-05-26 13:52:25'),
+(32, 'Delete Match', 'matches.delete', 'matches', 'Cancel or remove a match', '2026-05-26 13:52:25'),
+(33, 'Schedule Match', 'matches.schedule', 'matches', 'Schedule match dates and times', '2026-05-26 13:52:25'),
+(34, 'Assign Match Officials', 'officials.manage', 'matches', 'Assign referees and officials', '2026-05-26 13:52:25'),
+
+-- Match Lineups
+(35, 'Manage Lineups', 'lineups.manage', 'lineups', 'Full lineup management access', '2026-05-26 13:52:25'),
+(36, 'View Lineups', 'lineups.view', 'lineups', 'View match lineups', '2026-05-26 13:52:25'),
+(37, 'Submit Lineup', 'lineups.submit', 'lineups', 'Submit team lineups for matches', '2026-05-26 13:52:25'),
+(38, 'Approve Lineups', 'lineups.approve', 'approvals', 'Approve submitted lineups', '2026-05-26 13:52:25'),
+(39, 'Reject Lineup', 'lineups.reject', 'lineups', 'Reject submitted lineups', '2026-05-26 13:52:25'),
+
+-- Match Results
+(40, 'Manage Results', 'results.manage', 'results', 'Full match result management', '2026-05-26 13:52:25'),
+(41, 'View Results', 'results.view', 'results', 'View match results and statistics', '2026-05-26 13:52:25'),
+(42, 'Submit Result', 'results.submit', 'results', 'Submit match results', '2026-05-26 13:52:25'),
+(43, 'Approve Match Results', 'results.approve', 'approvals', 'Approve submitted match results', '2026-05-26 13:52:25'),
+(44, 'Reject Result', 'results.reject', 'results', 'Reject submitted match results', '2026-05-26 13:52:25'),
+
+-- Match Events
+(45, 'Manage Match Events', 'match_events.manage', 'match_events', 'Full match event management', '2026-05-26 13:52:25'),
+(46, 'View Match Events', 'match_events.view', 'match_events', 'View match events (goals, cards)', '2026-05-26 13:52:25'),
+(47, 'Record Match Event', 'match_events.create', 'match_events', 'Record goals, cards, and injuries', '2026-05-26 13:52:25'),
+(48, 'Edit Match Event', 'match_events.edit', 'match_events', 'Modify recorded match events', '2026-05-26 13:52:25'),
+(49, 'Delete Match Event', 'match_events.delete', 'match_events', 'Remove recorded match events', '2026-05-26 13:52:25'),
+
+-- Competitions
+(50, 'Manage Competitions', 'competitions.manage', 'competitions', 'Full competition management', '2026-05-26 13:52:25'),
+(51, 'View Competitions', 'competitions.view', 'competitions', 'View competitions and leagues', '2026-05-26 13:52:25'),
+(52, 'Create Competition', 'competitions.create', 'competitions', 'Create new competitions', '2026-05-26 13:52:25'),
+(53, 'Edit Competition', 'competitions.edit', 'competitions', 'Modify competition details', '2026-05-26 13:52:25'),
+(54, 'Delete Competition', 'competitions.delete', 'competitions', 'Remove competitions', '2026-05-26 13:52:25'),
+(55, 'Enroll Teams in Competition', 'competitions.enroll_teams', 'competitions', 'Add or remove teams from competitions', '2026-05-26 13:52:25'),
+
+-- Federations
+(56, 'Manage Federations', 'federations.manage', 'federations', 'Full federation management', '2026-05-26 13:52:25'),
+(57, 'View Federations', 'federations.view', 'federations', 'View federation information', '2026-05-26 13:52:25'),
+(58, 'Create Federation', 'federations.create', 'federations', 'Create new federations', '2026-05-26 13:52:25'),
+(59, 'Edit Federation', 'federations.edit', 'federations', 'Modify federation details', '2026-05-26 13:52:25'),
+(60, 'Delete Federation', 'federations.delete', 'federations', 'Remove federations', '2026-05-26 13:52:25'),
+
+-- Stadiums
+(61, 'Manage Stadiums', 'stadiums.manage', 'stadiums', 'Full stadium management', '2026-05-26 13:52:25'),
+(62, 'View Stadiums', 'stadiums.view', 'stadiums', 'View stadium information', '2026-05-26 13:52:25'),
+(63, 'Create Stadium', 'stadiums.create', 'stadiums', 'Add new stadiums', '2026-05-26 13:52:25'),
+(64, 'Edit Stadium', 'stadiums.edit', 'stadiums', 'Modify stadium details', '2026-05-26 13:52:25'),
+(65, 'Delete Stadium', 'stadiums.delete', 'stadiums', 'Remove stadiums', '2026-05-26 13:52:25'),
+
+-- Seasons
+(66, 'Manage Seasons', 'seasons.manage', 'seasons', 'Full season management', '2026-05-26 13:52:25'),
+(67, 'View Seasons', 'seasons.view', 'seasons', 'View season information', '2026-05-26 13:52:25'),
+(68, 'Create Season', 'seasons.create', 'seasons', 'Create new seasons', '2026-05-26 13:52:25'),
+(69, 'Edit Season', 'seasons.edit', 'seasons', 'Modify season details', '2026-05-26 13:52:25'),
+(70, 'Delete Season', 'seasons.delete', 'seasons', 'Remove seasons', '2026-05-26 13:52:25'),
+
+-- News
+(71, 'Manage News', 'news.manage', 'news', 'Full news management access', '2026-05-26 13:52:25'),
+(72, 'View News', 'news.view', 'news', 'View news articles', '2026-05-26 13:52:25'),
+(73, 'Create News', 'news.create', 'news', 'Write new news articles', '2026-05-26 13:52:25'),
+(74, 'Edit News', 'news.edit', 'news', 'Modify news articles', '2026-05-26 13:52:25'),
+(75, 'Delete News', 'news.delete', 'news', 'Remove news articles', '2026-05-26 13:52:25'),
+(76, 'Publish News', 'news.publish', 'news', 'Publish or unpublish news articles', '2026-05-26 13:52:25'),
+
+-- Media Files
+(77, 'Manage Media', 'media.manage', 'media', 'Full media management access', '2026-05-26 13:52:25'),
+(78, 'Upload Media', 'media.upload', 'media', 'Upload images and videos', '2026-05-26 13:52:25'),
+(79, 'View Media', 'media.view', 'media', 'View uploaded media files', '2026-05-26 13:52:25'),
+(80, 'Delete Media', 'media.delete', 'media', 'Delete uploaded media files', '2026-05-26 13:52:25'),
+
+-- Reports
+(81, 'View Reports', 'reports.view', 'reports', 'View system reports', '2026-05-26 13:52:25'),
+(82, 'Export Reports', 'reports.export', 'reports', 'Export reports to PDF/CSV', '2026-05-26 13:52:25'),
+(83, 'Generate Reports', 'reports.generate', 'reports', 'Generate custom reports', '2026-05-26 13:52:25'),
+
+-- Activity Logs
+(84, 'View Activity Logs', 'activity_logs.view', 'logs', 'View system audit logs', '2026-05-26 13:52:25'),
+(85, 'Export Activity Logs', 'activity_logs.export', 'logs', 'Export audit logs', '2026-05-26 13:52:25'),
+
+-- Settings
+(86, 'Manage Settings', 'settings.manage', 'settings', 'Full system settings access', '2026-05-26 13:52:25'),
+(87, 'View Settings', 'settings.view', 'settings', 'View system settings', '2026-05-26 13:52:25'),
+
+-- Notifications
+(88, 'View Notifications', 'notifications.view', 'notifications', 'View system notifications', '2026-05-26 13:52:25'),
+(89, 'Send Notifications', 'notifications.send', 'notifications', 'Send notifications to users', '2026-05-26 13:52:25'),
+(90, 'Delete Notifications', 'notifications.delete', 'notifications', 'Delete notifications', '2026-05-26 13:52:25'),
+
+-- Approvals
+(91, 'Approve Rankings', 'rankings.approve', 'approvals', 'Approve player ranking submissions', '2026-05-26 13:52:25'),
+(92, 'Approve Ratings', 'ratings.approve', 'approvals', 'Approve player rating submissions', '2026-05-26 13:52:25'),
+(93, 'Approve Statistics', 'statistics.approve', 'approvals', 'Approve player statistics submissions', '2026-05-26 13:52:25'),
+(94, 'Approve Player Registrations', 'player_registrations.approve', 'approvals', 'Approve player registration requests', '2026-05-26 13:52:25'),
+
+-- Player Ratings
+(95, 'Manage Player Ratings', 'player_ratings.manage', 'player_ratings', 'Full player rating management', '2026-05-26 13:52:25'),
+(96, 'Rate Player', 'player_ratings.rate', 'player_ratings', 'Submit player performance ratings', '2026-05-26 13:52:25'),
+(97, 'View Player Ratings', 'player_ratings.view', 'player_ratings', 'View player ratings', '2026-05-26 13:52:25'),
+
+-- Player Rankings
+(98, 'Manage Player Rankings', 'player_rankings.manage', 'player_rankings', 'Full player ranking management', '2026-05-26 13:52:25'),
+(99, 'View Player Rankings', 'player_rankings.view', 'player_rankings', 'View player rankings', '2026-05-26 13:52:25'),
+
+-- Player Statistics
+(100, 'Manage Player Statistics', 'player_statistics.manage', 'player_statistics', 'Full player statistics management', '2026-05-26 13:52:25'),
+(101, 'View Player Statistics', 'player_statistics.view', 'player_statistics', 'View player statistics', '2026-05-26 13:52:25'),
+
+-- Team Standings
+(102, 'View Team Standings', 'standings.view', 'standings', 'View league standings', '2026-05-26 13:52:25'),
+(103, 'Manage Team Standings', 'standings.manage', 'standings', 'Manage league standings', '2026-05-26 13:52:25'),
+
+-- Team Rankings
+(104, 'View Team Rankings', 'team_rankings.view', 'team_rankings', 'View team rankings', '2026-05-26 13:52:25'),
+(105, 'Manage Team Rankings', 'team_rankings.manage', 'team_rankings', 'Manage team rankings', '2026-05-26 13:52:25'),
+
+-- Substitutions
+(106, 'Manage Substitutions', 'substitutions.manage', 'substitutions', 'Full substitution management', '2026-05-26 13:52:25'),
+(107, 'Record Substitution', 'substitutions.create', 'substitutions', 'Record player substitutions', '2026-05-26 13:52:25'),
+
+-- Formations
+(108, 'Manage Formations', 'formations.manage', 'formations', 'Manage tactical formations', '2026-05-26 13:52:25'),
+(109, 'View Formations', 'formations.view', 'formations', 'View available formations', '2026-05-26 13:52:25');
 
 -- --------------------------------------------------------
 
@@ -1057,7 +1196,7 @@ ALTER TABLE `notifications`
 -- AUTO_INCREMENT for table `permissions`
 --
 ALTER TABLE `permissions`
-  MODIFY `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=24;
+  MODIFY `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=110;
 
 --
 -- AUTO_INCREMENT for table `players`

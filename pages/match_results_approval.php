@@ -1,7 +1,12 @@
-﻿<?php
+<?php
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!validate_csrf()) {
         set_flash('danger', 'Invalid token.');
+        redirect_to('index.php?page=match_results_approval');
+    }
+
+    if (!current_user_can('results.approve')) {
+        set_flash('danger', 'You do not have permission to approve/reject match results.');
         redirect_to('index.php?page=match_results_approval');
     }
 

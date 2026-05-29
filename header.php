@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 $settings = $settings ?? load_system_settings();
 $user = current_user();
 $notifications = fetch_user_notifications((int) ($user['id'] ?? 0), 6);
@@ -13,9 +13,7 @@ $unreadCount = unread_notification_count((int) ($user['id'] ?? 0));
     <link rel="stylesheet" href="assets/css/style.css">
 </head>
 <body data-primary-color="<?= e($settings['primary_color']); ?>" data-secondary-color="<?= e($settings['secondary_color']); ?>">
-<div class="spinner-overlay" id="loadingSpinner">
-    <div class="spinner"></div>
-</div>
+
 <div class="app-shell">
     <header class="topbar">
         <button id="sidebarToggle" class="icon-btn" type="button" aria-label="Toggle menu"><?= icon_svg('dashboard'); ?></button>

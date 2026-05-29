@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!validate_csrf()) {
         set_flash('danger', 'Invalid token.');
@@ -9,12 +9,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $id = (int) ($_POST['id'] ?? 0);
 
     if ($action === 'approve') {
+        if (!current_user_can('teams.approve')) {
+            set_flash('danger', 'You do not have permission to approve team registrations.');
+            redirect_to('index.php?page=team_registrations');
+        }
         db_execute('UPDATE teams SET is_active = 1, activated_at = NOW(), deactivated_at = NULL WHERE id = ?', 'i', [$id]);
         log_action('team_registration_approved', 'teams', 'teams', $id);
         set_flash('success', 'Team registration approved.');
     }
 
     if ($action === 'reject') {
+        if (!current_user_can('teams.approve')) {
+            set_flash('danger', 'You do not have permission to reject team registrations.');
+            redirect_to('index.php?page=team_registrations');
+        }
         db_execute('UPDATE teams SET is_active = 0, deactivated_at = NOW() WHERE id = ?', 'i', [$id]);
         log_action('team_registration_rejected', 'teams', 'teams', $id);
         set_flash('warning', 'Team registration marked as pending/rejected.');
@@ -56,18 +64,22 @@ $pendingTeams = db_fetch_all('SELECT t.*, s.name AS stadium_name FROM teams t LE
                                 <td><?= status_badge('pending'); ?></td>
                                 <td>
                                     <div class="action-group">
-                                        <form method="post">
-                                            <input type="hidden" name="csrf_token" value="<?= e(csrf_token()); ?>">
-                                            <input type="hidden" name="action" value="approve">
-                                            <input type="hidden" name="id" value="<?= (int) $team['id']; ?>">
-                                            <button class="btn btn-secondary btn-sm" type="submit">Approve</button>
-                                        </form>
-                                        <form method="post">
-                                            <input type="hidden" name="csrf_token" value="<?= e(csrf_token()); ?>">
-                                            <input type="hidden" name="action" value="reject">
-                                            <input type="hidden" name="id" value="<?= (int) $team['id']; ?>">
-                                            <button class="btn btn-danger btn-sm" type="submit">Reject</button>
-                                        </form>
+                                        <?php if (current_user_can('teams.approve')): ?>
+                                            <form method="post">
+                                                <input type="hidden" name="csrf_token" value="<?= e(csrf_token()); ?>">
+                                                <input type="hidden" name="action" value="approve">
+                                                <input type="hidden" name="id" value="<?= (int) $team['id']; ?>">
+                                                <button class="btn btn-secondary btn-sm" type="submit">Approve</button>
+                                            </form>
+                                            <form method="post">
+                                                <input type="hidden" name="csrf_token" value="<?= e(csrf_token()); ?>">
+                                                <input type="hidden" name="action" value="reject">
+                                                <input type="hidden" name="id" value="<?= (int) $team['id']; ?>">
+                                                <button class="btn btn-danger btn-sm" type="submit">Reject</button>
+                                            </form>
+                                        <?php else: ?>
+                                            <span class="badge badge-light"><i class="fa-solid fa-lock"></i> Locked</span>
+                                        <?php endif; ?>
                                     </div>
                                 </td>
                             </tr>

@@ -377,6 +377,383 @@ function ensure_default_roles()
     }
 }
 
+function default_permissions()
+{
+    return [
+        // Dashboard
+        ['Dashboard Access', 'dashboard.view', 'dashboard'],
+
+        // Teams
+        ['Manage Teams', 'teams.manage', 'teams'],
+        ['Approve Teams', 'teams.approve', 'teams'],
+        ['View Teams', 'teams.view', 'teams'],
+        ['Create Team', 'teams.create', 'teams'],
+        ['Edit Team', 'teams.edit', 'teams'],
+        ['Delete Team', 'teams.delete', 'teams'],
+        ['Activate Team', 'teams.activate', 'teams'],
+        ['Deactivate Team', 'teams.deactivate', 'teams'],
+
+        // Users
+        ['Manage Users', 'users.manage', 'users'],
+        ['View Users', 'users.view', 'users'],
+        ['Create User', 'users.create', 'users'],
+        ['Edit User', 'users.edit', 'users'],
+        ['Delete User', 'users.delete', 'users'],
+        ['Assign Role', 'users.assign_role', 'users'],
+
+        // Roles & Permissions
+        ['Manage Roles & Permissions', 'roles.manage', 'roles'],
+        ['View Roles', 'roles.view', 'roles'],
+        ['Create Role', 'roles.create', 'roles'],
+        ['Edit Role', 'roles.edit', 'roles'],
+        ['Delete Role', 'roles.delete', 'roles'],
+        ['Assign Permissions', 'roles.assign_permissions', 'roles'],
+
+        // Players
+        ['Manage Players', 'players.manage', 'players'],
+        ['View Players', 'players.view', 'players'],
+        ['Register Player', 'players.create', 'players'],
+        ['Edit Player', 'players.edit', 'players'],
+        ['Delete Player', 'players.delete', 'players'],
+        ['Transfer Player', 'players.transfer', 'players'],
+
+        // Matches
+        ['Manage Matches', 'matches.manage', 'matches'],
+        ['View Matches', 'matches.view', 'matches'],
+        ['Create Match', 'matches.create', 'matches'],
+        ['Edit Match', 'matches.edit', 'matches'],
+        ['Delete Match', 'matches.delete', 'matches'],
+        ['Schedule Match', 'matches.schedule', 'matches'],
+        ['Assign Match Officials', 'officials.manage', 'matches'],
+
+        // Match Lineups
+        ['Manage Lineups', 'lineups.manage', 'lineups'],
+        ['View Lineups', 'lineups.view', 'lineups'],
+        ['Submit Lineup', 'lineups.submit', 'lineups'],
+        ['Approve Lineups', 'lineups.approve', 'approvals'],
+        ['Reject Lineup', 'lineups.reject', 'lineups'],
+
+        // Match Results
+        ['Manage Results', 'results.manage', 'results'],
+        ['View Results', 'results.view', 'results'],
+        ['Submit Result', 'results.submit', 'results'],
+        ['Approve Match Results', 'results.approve', 'approvals'],
+        ['Reject Result', 'results.reject', 'results'],
+
+        // Match Events
+        ['Manage Match Events', 'match_events.manage', 'match_events'],
+        ['View Match Events', 'match_events.view', 'match_events'],
+        ['Record Match Event', 'match_events.create', 'match_events'],
+        ['Edit Match Event', 'match_events.edit', 'match_events'],
+        ['Delete Match Event', 'match_events.delete', 'match_events'],
+
+        // Competitions
+        ['Manage Competitions', 'competitions.manage', 'competitions'],
+        ['View Competitions', 'competitions.view', 'competitions'],
+        ['Create Competition', 'competitions.create', 'competitions'],
+        ['Edit Competition', 'competitions.edit', 'competitions'],
+        ['Delete Competition', 'competitions.delete', 'competitions'],
+        ['Enroll Teams in Competition', 'competitions.enroll_teams', 'competitions'],
+
+        // Federations
+        ['Manage Federations', 'federations.manage', 'federations'],
+        ['View Federations', 'federations.view', 'federations'],
+        ['Create Federation', 'federations.create', 'federations'],
+        ['Edit Federation', 'federations.edit', 'federations'],
+        ['Delete Federation', 'federations.delete', 'federations'],
+
+        // Stadiums
+        ['Manage Stadiums', 'stadiums.manage', 'stadiums'],
+        ['View Stadiums', 'stadiums.view', 'stadiums'],
+        ['Create Stadium', 'stadiums.create', 'stadiums'],
+        ['Edit Stadium', 'stadiums.edit', 'stadiums'],
+        ['Delete Stadium', 'stadiums.delete', 'stadiums'],
+
+        // Seasons
+        ['Manage Seasons', 'seasons.manage', 'seasons'],
+        ['View Seasons', 'seasons.view', 'seasons'],
+        ['Create Season', 'seasons.create', 'seasons'],
+        ['Edit Season', 'seasons.edit', 'seasons'],
+        ['Delete Season', 'seasons.delete', 'seasons'],
+
+        // News
+        ['Manage News', 'news.manage', 'news'],
+        ['View News', 'news.view', 'news'],
+        ['Create News', 'news.create', 'news'],
+        ['Edit News', 'news.edit', 'news'],
+        ['Delete News', 'news.delete', 'news'],
+        ['Publish News', 'news.publish', 'news'],
+
+        // Media Files
+        ['Manage Media', 'media.manage', 'media'],
+        ['Upload Media', 'media.upload', 'media'],
+        ['View Media', 'media.view', 'media'],
+        ['Delete Media', 'media.delete', 'media'],
+
+        // Reports
+        ['View Reports', 'reports.view', 'reports'],
+        ['Export Reports', 'reports.export', 'reports'],
+        ['Generate Reports', 'reports.generate', 'reports'],
+
+        // Activity Logs
+        ['View Activity Logs', 'activity_logs.view', 'logs'],
+        ['Export Activity Logs', 'activity_logs.export', 'logs'],
+
+        // Settings
+        ['Manage Settings', 'settings.manage', 'settings'],
+        ['View Settings', 'settings.view', 'settings'],
+
+        // Notifications
+        ['View Notifications', 'notifications.view', 'notifications'],
+        ['Send Notifications', 'notifications.send', 'notifications'],
+        ['Delete Notifications', 'notifications.delete', 'notifications'],
+
+        // Approvals
+        ['Approve Rankings', 'rankings.approve', 'approvals'],
+        ['Approve Ratings', 'ratings.approve', 'approvals'],
+        ['Approve Statistics', 'statistics.approve', 'approvals'],
+        ['Approve Player Registrations', 'player_registrations.approve', 'approvals'],
+
+        // Player Ratings
+        ['Manage Player Ratings', 'player_ratings.manage', 'player_ratings'],
+        ['Rate Player', 'player_ratings.rate', 'player_ratings'],
+        ['View Player Ratings', 'player_ratings.view', 'player_ratings'],
+
+        // Player Rankings
+        ['Manage Player Rankings', 'player_rankings.manage', 'player_rankings'],
+        ['View Player Rankings', 'player_rankings.view', 'player_rankings'],
+
+        // Player Statistics
+        ['Manage Player Statistics', 'player_statistics.manage', 'player_statistics'],
+        ['View Player Statistics', 'player_statistics.view', 'player_statistics'],
+
+        // Team Standings
+        ['View Team Standings', 'standings.view', 'standings'],
+        ['Manage Team Standings', 'standings.manage', 'standings'],
+
+        // Team Rankings
+        ['View Team Rankings', 'team_rankings.view', 'team_rankings'],
+        ['Manage Team Rankings', 'team_rankings.manage', 'team_rankings'],
+
+        // Substitutions
+        ['Manage Substitutions', 'substitutions.manage', 'substitutions'],
+        ['Record Substitution', 'substitutions.create', 'substitutions'],
+
+        // Formations
+        ['Manage Formations', 'formations.manage', 'formations'],
+        ['View Formations', 'formations.view', 'formations'],
+    ];
+}
+
+function ensure_default_permissions()
+{
+    foreach (default_permissions() as $permission) {
+        $existing = db_fetch_one('SELECT id FROM permissions WHERE slug = ?', 's', [$permission[1]]);
+        if (!$existing) {
+            db_execute(
+                'INSERT INTO permissions (name, slug, module) VALUES (?, ?, ?)',
+                'sss',
+                $permission
+            );
+        }
+    }
+}
+
+function ensure_master_role_permissions()
+{
+    ensure_default_roles();
+    ensure_default_permissions();
+
+    $masterRoles = db_fetch_all(
+        "SELECT id FROM roles WHERE slug IN ('super_admin', 'federation-role', 'federation_role', 'federation-admin', 'federation_admin')"
+    );
+    $permissions = db_fetch_all('SELECT id FROM permissions');
+
+    foreach ($masterRoles as $role) {
+        foreach ($permissions as $permission) {
+            $exists = db_fetch_one(
+                'SELECT id FROM role_permissions WHERE role_id = ? AND permission_id = ?',
+                'ii',
+                [(int) $role['id'], (int) $permission['id']]
+            );
+            if (!$exists) {
+                db_execute(
+                    'INSERT INTO role_permissions (role_id, permission_id) VALUES (?, ?)',
+                    'ii',
+                    [(int) $role['id'], (int) $permission['id']]
+                );
+            }
+        }
+    }
+
+    // Assign realistic default permissions to other system roles
+    $rolePermissionsMapping = [
+        'team-role' => [
+            'dashboard.view', 'players.view', 'players.create', 'players.edit', 'players.delete',
+            'players.transfer', 'players.manage', 'lineups.view', 'lineups.submit', 'lineups.manage',
+            'lineups.reject', 'results.view', 'results.submit', 'results.manage', 'results.reject',
+            'matches.view', 'matches.manage', 'news.view', 'match_events.view', 'formations.view'
+        ],
+        'team-manager' => [
+            'dashboard.view', 'players.view', 'players.create', 'players.edit', 'players.delete',
+            'players.transfer', 'players.manage', 'lineups.view', 'lineups.submit', 'lineups.manage',
+            'lineups.reject', 'results.view', 'results.submit', 'results.manage', 'results.reject',
+            'matches.view', 'matches.manage', 'news.view', 'match_events.view', 'formations.view'
+        ],
+        'coach' => [
+            'dashboard.view', 'players.view', 'lineups.view', 'lineups.submit', 'lineups.manage',
+            'results.view', 'matches.view', 'news.view', 'formations.view', 'formations.manage',
+            'player_ratings.view', 'player_ratings.rate', 'player_ratings.manage'
+        ],
+        'match-official' => [
+            'dashboard.view', 'matches.view', 'results.view', 'results.submit', 'results.manage',
+            'match_events.view', 'match_events.create', 'match_events.manage',
+            'substitutions.manage', 'substitutions.create'
+        ],
+        'analyst' => [
+            'dashboard.view', 'players.view', 'player_rankings.view', 'player_ratings.view',
+            'player_statistics.view', 'standings.view', 'team_rankings.view', 'reports.view',
+            'reports.export', 'reports.generate'
+        ],
+        'media-officer' => [
+            'dashboard.view', 'news.view', 'news.create', 'news.edit', 'news.delete', 'news.publish'
+        ]
+    ];
+
+    foreach ($rolePermissionsMapping as $roleSlug => $permSlugs) {
+        $roleRow = db_fetch_one('SELECT id FROM roles WHERE slug = ?', 's', [$roleSlug]);
+        if ($roleRow) {
+            $roleId = (int) $roleRow['id'];
+            foreach ($permSlugs as $pSlug) {
+                $permRow = db_fetch_one('SELECT id FROM permissions WHERE slug = ?', 's', [$pSlug]);
+                if ($permRow) {
+                    $permId = (int) $permRow['id'];
+                    $exists = db_fetch_one(
+                        'SELECT id FROM role_permissions WHERE role_id = ? AND permission_id = ?',
+                        'ii',
+                        [$roleId, $permId]
+                    );
+                    if (!$exists) {
+                        db_execute(
+                            'INSERT INTO role_permissions (role_id, permission_id) VALUES (?, ?)',
+                            'ii',
+                            [$roleId, $permId]
+                        );
+                    }
+                }
+            }
+        }
+    }
+}
+
+function user_role_slugs($userId)
+{
+    $rows = db_fetch_all(
+        'SELECT r.slug FROM user_roles ur INNER JOIN roles r ON r.id = ur.role_id WHERE ur.user_id = ?',
+        'i',
+        [(int) $userId]
+    );
+
+    return array_map(static function ($row) {
+        return (string) $row['slug'];
+    }, $rows);
+}
+
+function user_has_master_role($userId)
+{
+    $user = current_user();
+    if ($user && (int) ($user['id'] ?? 0) === (int) $userId && ($user['user_type'] ?? '') === 'admin') {
+        return true;
+    }
+
+    $masterSlugs = ['super_admin', 'federation-role', 'federation_role', 'federation-admin', 'federation_admin'];
+    return count(array_intersect(user_role_slugs($userId), $masterSlugs)) > 0;
+}
+
+function user_permission_slugs($userId)
+{
+    if (user_has_master_role($userId)) {
+        $rows = db_fetch_all('SELECT slug FROM permissions');
+    } else {
+        $rows = db_fetch_all(
+            'SELECT DISTINCT p.slug
+             FROM user_roles ur
+             INNER JOIN role_permissions rp ON rp.role_id = ur.role_id
+             INNER JOIN permissions p ON p.id = rp.permission_id
+             WHERE ur.user_id = ?',
+            'i',
+            [(int) $userId]
+        );
+    }
+
+    return array_map(static function ($row) {
+        return (string) $row['slug'];
+    }, $rows);
+}
+
+function user_has_permission($userId, $permissionSlug)
+{
+    if ($permissionSlug === null || $permissionSlug === '') {
+        return true;
+    }
+
+    return in_array((string) $permissionSlug, user_permission_slugs((int) $userId), true);
+}
+
+function current_user_can($permissionSlug)
+{
+    $user = current_user();
+    if (!$user) {
+        return false;
+    }
+
+    return user_has_permission((int) $user['id'], $permissionSlug);
+}
+
+function page_permission_slug($page)
+{
+    $map = [
+        'dashboard' => 'dashboard.view',
+        'teams' => 'teams.manage',
+        'team_registrations' => 'teams.approve',
+        'users' => 'users.manage',
+        'roles_permissions' => 'roles.manage',
+        'assign_roles' => 'users.assign_role',
+        'player_rankings_approval' => 'rankings.approve',
+        'player_ratings_approval' => 'ratings.approve',
+        'player_statistics_approval' => 'statistics.approve',
+        'player_registrations_approval' => 'player_registrations.approve',
+        'stadiums' => 'stadiums.manage',
+        'seasons' => 'seasons.manage',
+        'match_results_approval' => 'results.approve',
+        'match_officials' => 'officials.manage',
+        'match_lineups_approval' => 'lineups.approve',
+        'news' => 'news.manage',
+        'activity_logs' => 'activity_logs.view',
+        'reports' => 'reports.view',
+        'settings' => 'settings.manage',
+
+        // Team Portal Page Mappings
+        'squad' => 'players.view',
+        'players' => 'players.view',
+        'lineups' => 'lineups.view',
+        'matches' => 'matches.view',
+        'results' => 'results.view',
+    ];
+
+    return $map[$page] ?? null;
+}
+
+function current_user_can_page($page)
+{
+    $alwaysAllowed = ['profile', 'logout', 'notifications', 'news'];
+    if (in_array((string) $page, $alwaysAllowed, true)) {
+        return true;
+    }
+
+    return current_user_can(page_permission_slug($page));
+}
+
 function total_pages($totalItems)
 {
     return max(1, (int) ceil($totalItems / per_page()));
@@ -428,6 +805,8 @@ function page_title($page)
         'player_rankings_approval' => 'Player Rankings Approval',
         'player_ratings_approval' => 'Player Ratings Approval',
         'player_statistics_approval' => 'Player Statistics Approval',
+        'player_registrations_approval' => 'Player Registrations Approval',
+        'players' => 'Players',
         'stadiums' => 'Stadium Management',
         'seasons' => 'Seasons Management',
         'match_results_approval' => 'Match Results Approval',
@@ -435,6 +814,7 @@ function page_title($page)
         'match_lineups_approval' => 'Match Lineups Approval',
         'news' => 'News Management',
         'activity_logs' => 'Activity Logs',
+        'notifications' => 'Notifications',
         'reports' => 'Reports',
         'settings' => 'Settings',
         'profile' => 'Profile',

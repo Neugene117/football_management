@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 $myTeamId = (int) (current_user()['entity_id'] ?? 0);
 $matches = $myTeamId > 0
   ? db_fetch_all("SELECT m.id, m.match_date, ht.name home_team, at.name away_team FROM matches m LEFT JOIN teams ht ON ht.id=m.home_team_id LEFT JOIN teams at ON at.id=m.away_team_id WHERE m.home_team_id=? OR m.away_team_id=? ORDER BY m.match_date DESC LIMIT 120", 'ii', [$myTeamId, $myTeamId])
@@ -8,6 +8,11 @@ $formations = db_fetch_all('SELECT id, display_name FROM formations WHERE is_act
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   if (!validate_csrf()) {
     set_flash('danger', 'Invalid token.');
+    redirect_to('index.php?page=lineups');
+  }
+
+  if (!current_user_can('lineups.submit')) {
+    set_flash('danger', 'You do not have permission to submit lineups.');
     redirect_to('index.php?page=lineups');
   }
 
@@ -48,7 +53,9 @@ $lineups = $myTeamId > 0
 <div class="card">
   <div class="card-head">
     <h3>Lineup Submissions</h3>
-    <button class="btn btn-primary btn-sm" type="button" data-open-modal="#lineupModal"><?= icon_svg('add'); ?> Submit Lineup</button>
+    <?php if (current_user_can('lineups.submit')): ?>
+      <button class="btn btn-primary btn-sm" type="button" data-open-modal="#lineupModal"><?= icon_svg('add'); ?> Submit Lineup</button>
+    <?php endif; ?>
   </div>
   <div class="card-body">
     <div class="table-wrap">
