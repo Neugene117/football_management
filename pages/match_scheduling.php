@@ -87,7 +87,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'match_date' => $matchDate,
                     'match_time' => $matchTime
                 ]);
-                set_flash('success', 'Match scheduled successfully.');
+
+                // Fetch team names to include in notifications
+                $homeTeam = db_fetch_one('SELECT name FROM teams WHERE id = ?', 'i', [$homeTeamId]);
+                $awayTeam = db_fetch_one('SELECT name FROM teams WHERE id = ?', 'i', [$awayTeamId]);
+                $homeName = $homeTeam ? $homeTeam['name'] : 'Home Team';
+                $awayName = $awayTeam ? $awayTeam['name'] : 'Away Team';
+
+                // Send notifications to Home Team managers
+                $homeUsers = db_fetch_all("SELECT id FROM users WHERE user_type = 'club' AND entity_id = ? AND is_active = 1", 'i', [$homeTeamId]);
+                foreach ($homeUsers as $hu) {
+                    create_notification(
+                        (int) $hu['id'],
+                        'match',
+                        'New Match Scheduled vs ' . $awayName,
+                        'Your match vs ' . $awayName . ' has been scheduled on ' . $matchDate . '. Click to prepare your lineup: index.php?page=lineup_prepare&match_id=' . $newId
+                    );
+                }
+
+                // Send notifications to Away Team managers
+                $awayUsers = db_fetch_all("SELECT id FROM users WHERE user_type = 'club' AND entity_id = ? AND is_active = 1", 'i', [$awayTeamId]);
+                foreach ($awayUsers as $au) {
+                    create_notification(
+                        (int) $au['id'],
+                        'match',
+                        'New Match Scheduled vs ' . $homeName,
+                        'Your match vs ' . $homeName . ' has been scheduled on ' . $matchDate . '. Click to prepare your lineup: index.php?page=lineup_prepare&match_id=' . $newId
+                    );
+                }
+
+                set_flash('success', 'Match scheduled successfully and teams notified.');
             } else {
                 set_flash('danger', 'Failed to schedule match. Check database integrity.');
             }
@@ -324,19 +353,18 @@ $stadiums = db_fetch_all('SELECT id, name, city FROM stadiums ORDER BY name ASC'
                         <input type="text" name="round" value="<?= e($editing['round'] ?? ''); ?>" placeholder="e.g. Regular Season, Quarter-final">
                     </label>
 
-                    <?php if ($editing): ?>
-                        <label class="full">Status
-                            <select name="status">
-                                <option value="scheduled" <?= ($editing['status'] === 'scheduled') ? 'selected' : ''; ?>>Scheduled</option>
-                                <option value="lineup_pending" <?= ($editing['status'] === 'lineup_pending') ? 'selected' : ''; ?>>Lineup Pending</option>
-                                <option value="lineup_approved" <?= ($editing['status'] === 'lineup_approved') ? 'selected' : ''; ?>>Lineup Approved</option>
-                                <option value="in_progress" <?= ($editing['status'] === 'in_progress') ? 'selected' : ''; ?>>In Progress</option>
-                                <option value="completed" <?= ($editing['status'] === 'completed') ? 'selected' : ''; ?>>Completed</option>
-                                <option value="postponed" <?= ($editing['status'] === 'postponed') ? 'selected' : ''; ?>>Postponed</option>
-                                <option value="cancelled" <?= ($editing['status'] === 'cancelled') ? 'selected' : ''; ?>>Cancelled</option>
-                            </select>
-                        </label>
-                    <?php endif; ?>
+                    <label class="full">Status
+                        <select name="status">
+                            <?php $currStatus = $editing['status'] ?? 'scheduled'; ?>
+                            <option value="scheduled" <?= ($currStatus === 'scheduled') ? 'selected' : ''; ?>>Scheduled</option>
+                            <option value="lineup_pending" <?= ($currStatus === 'lineup_pending') ? 'selected' : ''; ?>>Lineup Pending</option>
+                            <option value="lineup_approved" <?= ($currStatus === 'lineup_approved') ? 'selected' : ''; ?>>Lineup Approved</option>
+                            <option value="in_progress" <?= ($currStatus === 'in_progress') ? 'selected' : ''; ?>>In Progress</option>
+                            <option value="completed" <?= ($currStatus === 'completed') ? 'selected' : ''; ?>>Completed</option>
+                            <option value="postponed" <?= ($currStatus === 'postponed') ? 'selected' : ''; ?>>Postponed</option>
+                            <option value="cancelled" <?= ($currStatus === 'cancelled') ? 'selected' : ''; ?>>Cancelled</option>
+                        </select>
+                    </label>
                 </div>
             </div>
             <div class="modal-foot">

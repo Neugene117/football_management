@@ -87,32 +87,37 @@ $allNews = db_fetch_all("
 $mainNews = $allNews[0] ?? null;
 $subNews = array_slice($allNews, 1);
 
-// 10. Fetch Pitch Lineup Data (APR FC & Police FC rosters)
-$aprRow = db_fetch_one("SELECT id, logo FROM teams WHERE name = 'APR FC'");
-$aprId = $aprRow ? (int) $aprRow['id'] : 0;
-$aprDbPlayers = [];
-if ($aprId > 0) {
-    $aprDbPlayers = db_fetch_all("
-        SELECT p.first_name, p.last_name, p.jersey_number, p.position, p.photo_pl 
-        FROM players p 
-        WHERE p.team_id = ? 
-        ORDER BY FIELD(p.position, 'goalkeeper', 'defender', 'midfielder', 'forward') ASC 
-        LIMIT 11
-    ", 'i', [$aprId]);
-}
+// 10. Fetch Pitch Lineup Data Dynamically from the scheduled matches and active manager rosters!
+$latestMatch = db_fetch_one("
+    SELECT m.id, m.match_date, m.match_time, m.matchday,
+           ht.id home_team_id, ht.name home_team, ht.logo home_logo,
+           at.id away_team_id, at.name away_team, at.logo away_logo,
+           s.name stadium_name, c.name competition_name,
+           (SELECT MAX(updated_at) FROM match_lineups WHERE match_id = m.id) AS last_lineup_update
+    FROM matches m 
+    LEFT JOIN teams ht ON ht.id = m.home_team_id 
+    LEFT JOIN teams at ON at.id = m.away_team_id 
+    LEFT JOIN stadiums s ON s.id = m.stadium_id 
+    LEFT JOIN competitions c ON c.id = m.competition_id
+    WHERE m.status IN ('scheduled', 'lineup_pending', 'lineup_approved', 'in_progress', 'completed')
+    ORDER BY (SELECT COUNT(*) FROM match_lineups WHERE match_id = m.id) DESC, last_lineup_update DESC, m.match_date DESC, m.id DESC 
+    LIMIT 1
+");
 
-$policeRow = db_fetch_one("SELECT id, logo FROM teams WHERE name = 'Police FC'");
-$policeId = $policeRow ? (int) $policeRow['id'] : 0;
-$policeDbPlayers = [];
-if ($policeId > 0) {
-    $policeDbPlayers = db_fetch_all("
-        SELECT p.first_name, p.last_name, p.jersey_number, p.position, p.photo_pl 
-        FROM players p 
-        WHERE p.team_id = ? 
-        ORDER BY FIELD(p.position, 'goalkeeper', 'defender', 'midfielder', 'forward') ASC 
-        LIMIT 11
-    ", 'i', [$policeId]);
-}
+// Fallback defaults if no match exists in the database
+$homeId = 0; $awayId = 0;
+$homeName = 'APR FC'; $awayName = 'Police FC';
+$homeLogo = ''; $awayLogo = '';
+$matchdayText = 'Matchday 23 &nbsp;•&nbsp; Sat 15:00';
+$stadiumText = 'Regional Stadium';
+
+$homeFormation = '4-3-3';
+$awayFormation = '4-4-2';
+
+$homePlayers = [];
+$homeBench = [];
+$awayPlayers = [];
+$awayBench = [];
 
 // Map position strings to abbreviated positions
 function mapPositionAbbrev($pos) {
@@ -133,6 +138,169 @@ function mapPositionType($pos) {
         'forward' => 'fwd'
     ];
     return $map[strtolower($pos)] ?? 'mid';
+}
+
+function mapPositionTypeColor($posType) {
+    $colors = [
+        'gk' => '#F97316', // Orange
+        'def' => '#1E3A8A', // Navy
+        'mid' => '#15803d', // Green
+        'fwd' => '#dc2626'  // Red
+    ];
+    return $colors[$posType] ?? '#15803d';
+}
+
+if ($latestMatch) {
+    $homeId = (int) $latestMatch['home_team_id'];
+    $awayId = (int) $latestMatch['away_team_id'];
+    $homeName = $latestMatch['home_team'];
+    $awayName = $latestMatch['away_team'];
+    $homeLogo = $latestMatch['home_logo'];
+    $awayLogo = $latestMatch['away_logo'];
+    
+    $mDate = date('D H:i', strtotime($latestMatch['match_date'] . ' ' . ($latestMatch['match_time'] ?: '15:00:00')));
+    $matchdayText = 'Matchday ' . ($latestMatch['matchday'] ?: '1') . ' &nbsp;•&nbsp; ' . $mDate;
+    $stadiumText = $latestMatch['stadium_name'] ?: 'National Stadium';
+
+    // 1. Fetch Home Lineup
+    $homeLineup = db_fetch_one("
+        SELECT ml.id, f.name formation_name, f.display_name formation_display 
+        FROM match_lineups ml 
+        JOIN formations f ON f.id = ml.formation_id 
+        WHERE ml.match_id = ? AND ml.team_id = ?
+    ", 'ii', [(int) $latestMatch['id'], $homeId]);
+
+    if ($homeLineup) {
+        $homeFormation = $homeLineup['formation_name'];
+        $homeStarters = db_fetch_all("
+            SELECT lp.*, p.first_name, p.last_name, p.jersey_number, p.position, p.photo_pl 
+            FROM lineup_players lp 
+            JOIN players p ON p.id = lp.player_id 
+            WHERE lp.lineup_id = ? AND lp.is_starter = 1
+            ORDER BY FIELD(lp.position_slot, 'GK', 'DEF_0', 'DEF_1', 'DEF_2', 'DEF_3', 'DEF_4', 'MID_0', 'MID_1', 'MID_2', 'MID_3', 'MID_4', 'FWD_0', 'FWD_1', 'FWD_2') ASC
+        ", 'i', [(int) $homeLineup['id']]);
+        
+        $homePlayers = array_map(function($p) {
+            return [
+                'name' => $p['first_name'] . ' ' . $p['last_name'],
+                'short' => strtoupper(substr($p['last_name'], 0, 3)),
+                'num' => (int) $p['jersey_number'],
+                'pos' => mapPositionAbbrev($p['position']),
+                'posType' => mapPositionType($p['position']),
+                'img' => $p['photo_pl'] ? app_url($p['photo_pl']) : '',
+                'x' => (float) $p['field_x'],
+                'y' => (float) $p['field_y']
+            ];
+        }, $homeStarters);
+
+        $homeSubstitutes = db_fetch_all("
+            SELECT p.first_name, p.last_name, p.jersey_number, p.position 
+            FROM lineup_players lp 
+            JOIN players p ON p.id = lp.player_id 
+            WHERE lp.lineup_id = ? AND lp.is_starter = 0
+        ", 'i', [(int) $homeLineup['id']]);
+        
+        $homeBench = array_map(function($p) {
+            return [
+                'name' => $p['first_name'] . ' ' . $p['last_name'],
+                'num' => (int) $p['jersey_number'],
+                'pos' => mapPositionAbbrev($p['position']),
+                'posType' => mapPositionType($p['position'])
+            ];
+        }, $homeSubstitutes);
+    } else {
+        // Fallback: active players in default 4-3-3 coordinates
+        $activePlayers = db_fetch_all("SELECT p.* FROM players p WHERE p.team_id = ? AND p.status = 'active' LIMIT 11", 'i', [$homeId]);
+        $defaultCoords = [
+            ['x' => 180, 'y' => 455],
+            ['x' => 55, 'y' => 375], ['x' => 128, 'y' => 375], ['x' => 232, 'y' => 375], ['x' => 305, 'y' => 375],
+            ['x' => 88, 'y' => 282], ['x' => 180, 'y' => 272], ['x' => 272, 'y' => 282],
+            ['x' => 78, 'y' => 172], ['x' => 180, 'y' => 158], ['x' => 282, 'y' => 172]
+        ];
+        foreach ($activePlayers as $idx => $p) {
+            $c = $defaultCoords[$idx] ?? ['x' => 180, 'y' => 250];
+            $homePlayers[] = [
+                'name' => $p['first_name'] . ' ' . $p['last_name'],
+                'short' => strtoupper(substr($p['last_name'], 0, 3)),
+                'num' => (int) $p['jersey_number'],
+                'pos' => mapPositionAbbrev($p['position']),
+                'posType' => mapPositionType($p['position']),
+                'img' => $p['photo_pl'] ? app_url($p['photo_pl']) : '',
+                'x' => $c['x'],
+                'y' => $c['y']
+            ];
+        }
+    }
+
+    // 2. Fetch Away Lineup
+    $awayLineup = db_fetch_one("
+        SELECT ml.id, f.name formation_name, f.display_name formation_display 
+        FROM match_lineups ml 
+        JOIN formations f ON f.id = ml.formation_id 
+        WHERE ml.match_id = ? AND ml.team_id = ?
+    ", 'ii', [(int) $latestMatch['id'], $awayId]);
+
+    if ($awayLineup) {
+        $awayFormation = $awayLineup['formation_name'];
+        $awayStarters = db_fetch_all("
+            SELECT lp.*, p.first_name, p.last_name, p.jersey_number, p.position, p.photo_pl 
+            FROM lineup_players lp 
+            JOIN players p ON p.id = lp.player_id 
+            WHERE lp.lineup_id = ? AND lp.is_starter = 1
+            ORDER BY FIELD(lp.position_slot, 'GK', 'DEF_0', 'DEF_1', 'DEF_2', 'DEF_3', 'DEF_4', 'MID_0', 'MID_1', 'MID_2', 'MID_3', 'MID_4', 'FWD_0', 'FWD_1', 'FWD_2') ASC
+        ", 'i', [(int) $awayLineup['id']]);
+        
+        $awayPlayers = array_map(function($p) {
+            return [
+                'name' => $p['first_name'] . ' ' . $p['last_name'],
+                'short' => strtoupper(substr($p['last_name'], 0, 3)),
+                'num' => (int) $p['jersey_number'],
+                'pos' => mapPositionAbbrev($p['position']),
+                'posType' => mapPositionType($p['position']),
+                'img' => $p['photo_pl'] ? app_url($p['photo_pl']) : '',
+                'x' => (float) $p['field_x'],
+                'y' => (float) $p['field_y']
+            ];
+        }, $awayStarters);
+
+        $awaySubstitutes = db_fetch_all("
+            SELECT p.first_name, p.last_name, p.jersey_number, p.position 
+            FROM lineup_players lp 
+            JOIN players p ON p.id = lp.player_id 
+            WHERE lp.lineup_id = ? AND lp.is_starter = 0
+        ", 'i', [(int) $awayLineup['id']]);
+        
+        $awayBench = array_map(function($p) {
+            return [
+                'name' => $p['first_name'] . ' ' . $p['last_name'],
+                'num' => (int) $p['jersey_number'],
+                'pos' => mapPositionAbbrev($p['position']),
+                'posType' => mapPositionType($p['position'])
+            ];
+        }, $awaySubstitutes);
+    } else {
+        // Fallback: active players in default 4-4-2 coordinates
+        $activePlayers = db_fetch_all("SELECT p.* FROM players p WHERE p.team_id = ? AND p.status = 'active' LIMIT 11", 'i', [$awayId]);
+        $defaultCoords = [
+            ['x' => 180, 'y' => 455],
+            ['x' => 55, 'y' => 370], ['x' => 125, 'y' => 370], ['x' => 220, 'y' => 370], ['x' => 290, 'y' => 370],
+            ['x' => 62, 'y' => 275], ['x' => 135, 'y' => 265], ['x' => 210, 'y' => 265], ['x' => 285, 'y' => 275],
+            ['x' => 130, 'y' => 158], ['x' => 215, 'y' => 158]
+        ];
+        foreach ($activePlayers as $idx => $p) {
+            $c = $defaultCoords[$idx] ?? ['x' => 180, 'y' => 250];
+            $awayPlayers[] = [
+                'name' => $p['first_name'] . ' ' . $p['last_name'],
+                'short' => strtoupper(substr($p['last_name'], 0, 3)),
+                'num' => (int) $p['jersey_number'],
+                'pos' => mapPositionAbbrev($p['position']),
+                'posType' => mapPositionType($p['position']),
+                'img' => $p['photo_pl'] ? app_url($p['photo_pl']) : '',
+                'x' => $c['x'],
+                'y' => $c['y']
+            ];
+        }
+    }
 }
 ?>
 <!DOCTYPE html>
@@ -655,17 +823,17 @@ function mapPositionType($pos) {
     <!-- Header -->
     <div class="ps-hd">
       <div class="ps-match-info">
-        <div class="ps-title" id="ps-match-title">APR FC <span>vs Police FC</span></div>
+        <div class="ps-title" id="ps-match-title"><?= e($homeName); ?> <span>vs <?= e($awayName); ?></span></div>
         <div class="ps-meta">
           <span class="ps-meta-dot"></span>
-          <span id="ps-formation-label">Formation: 4-3-3</span>
+          <span id="ps-formation-label">Formation: <?= e($homeFormation); ?></span>
           <span style="color:rgba(255,255,255,.15)">|</span>
-          <span>Matchday 23 &nbsp;•&nbsp; Sat 15:00</span>
+          <span><?= $matchdayText; ?> &nbsp;•&nbsp; <?= e($stadiumText); ?></span>
         </div>
       </div>
       <div class="ps-tabs">
-        <span class="ps-tab active" data-team="0">APR FC</span>
-        <span class="ps-tab" data-team="1">Police FC</span>
+        <span class="ps-tab active" data-team="0"><?= e($homeName); ?></span>
+        <span class="ps-tab" data-team="1"><?= e($awayName); ?></span>
       </div>
     </div>
     <!-- Body -->
@@ -687,6 +855,9 @@ function mapPositionType($pos) {
               <filter id="shadow0" x="-20%" y="-20%" width="140%" height="140%">
                 <feDropShadow dx="0" dy="1" stdDeviation="2" flood-color="rgba(0,0,0,.5)"/>
               </filter>
+              <clipPath id="circleClipIndex">
+                <circle cx="0" cy="0" r="15" />
+              </clipPath>
             </defs>
             <!-- Base + stripes -->
             <rect width="360" height="500" rx="10" fill="url(#gfg0)"/>
@@ -718,77 +889,33 @@ function mapPositionType($pos) {
             <path d="M 338 470 A 8 8 0 0 1 330 480" fill="none" stroke="rgba(255,255,255,.35)" stroke-width="1"/>
             <!-- Formation badge -->
             <rect x="146" y="7" width="68" height="14" rx="4" fill="rgba(249,115,22,.9)"/>
-            <text x="180" y="17.5" text-anchor="middle" font-size="8" font-weight="700" fill="white" font-family="Barlow,sans-serif" letter-spacing=".5">4 – 3 – 3</text>
+            <text x="180" y="17.5" text-anchor="middle" font-size="8" font-weight="700" fill="white" font-family="Barlow,sans-serif" letter-spacing=".5"><?= e($homeFormation); ?></text>
 
-            <!-- GK -->
-            <g filter="url(#shadow0)"><circle cx="180" cy="455" r="17" fill="#F97316" stroke="white" stroke-width="2"/></g>
-            <text x="180" y="451" text-anchor="middle" font-size="7" font-weight="700" fill="white" font-family="Barlow,sans-serif">NSHUTI</text>
-            <text x="180" y="461" text-anchor="middle" font-size="6" fill="rgba(255,255,255,.75)" font-family="sans-serif">GK</text>
-            <rect x="168" y="472" width="24" height="10" rx="3" fill="rgba(0,0,0,.5)"/>
-            <text x="180" y="479.5" text-anchor="middle" font-size="6.5" fill="white" font-family="Barlow,sans-serif" font-weight="700">#1</text>
-
-            <!-- DEF 4 -->
-            <g filter="url(#shadow0)"><circle cx="55" cy="375" r="15" fill="#1E3A8A" stroke="white" stroke-width="1.8"/></g>
-            <text x="55" y="371" text-anchor="middle" font-size="6.2" font-weight="700" fill="white" font-family="sans-serif">SAFARI</text>
-            <text x="55" y="380" text-anchor="middle" font-size="5.5" fill="rgba(255,255,255,.7)" font-family="sans-serif">RB</text>
-            <rect x="43" y="390" width="24" height="9" rx="2.5" fill="rgba(0,0,0,.45)"/>
-            <text x="55" y="397" text-anchor="middle" font-size="6" fill="white" font-family="sans-serif">#3</text>
-
-            <g filter="url(#shadow0)"><circle cx="128" cy="375" r="15" fill="#1E3A8A" stroke="white" stroke-width="1.8"/></g>
-            <text x="128" y="371" text-anchor="middle" font-size="5.8" font-weight="700" fill="white" font-family="sans-serif">HAKIZIM.</text>
-            <text x="128" y="380" text-anchor="middle" font-size="5.5" fill="rgba(255,255,255,.7)" font-family="sans-serif">CB</text>
-            <rect x="116" y="390" width="24" height="9" rx="2.5" fill="rgba(0,0,0,.45)"/>
-            <text x="128" y="397" text-anchor="middle" font-size="6" fill="white" font-family="sans-serif">#5</text>
-
-            <g filter="url(#shadow0)"><circle cx="232" cy="375" r="15" fill="#1E3A8A" stroke="white" stroke-width="1.8"/></g>
-            <text x="232" y="371" text-anchor="middle" font-size="6.2" font-weight="700" fill="white" font-family="sans-serif">MUTESA</text>
-            <text x="232" y="380" text-anchor="middle" font-size="5.5" fill="rgba(255,255,255,.7)" font-family="sans-serif">CB</text>
-            <rect x="220" y="390" width="24" height="9" rx="2.5" fill="rgba(0,0,0,.45)"/>
-            <text x="232" y="397" text-anchor="middle" font-size="6" fill="white" font-family="sans-serif">#4</text>
-
-            <g filter="url(#shadow0)"><circle cx="305" cy="375" r="15" fill="#1E3A8A" stroke="white" stroke-width="1.8"/></g>
-            <text x="305" y="371" text-anchor="middle" font-size="6.2" font-weight="700" fill="white" font-family="sans-serif">RUGIRA</text>
-            <text x="305" y="380" text-anchor="middle" font-size="5.5" fill="rgba(255,255,255,.7)" font-family="sans-serif">LB</text>
-            <rect x="293" y="390" width="24" height="9" rx="2.5" fill="rgba(0,0,0,.45)"/>
-            <text x="305" y="397" text-anchor="middle" font-size="6" fill="white" font-family="sans-serif">#12</text>
-
-            <!-- MID 3 -->
-            <g filter="url(#shadow0)"><circle cx="88" cy="282" r="15" fill="#15803d" stroke="white" stroke-width="1.8"/></g>
-            <text x="88" y="278" text-anchor="middle" font-size="6" font-weight="700" fill="white" font-family="sans-serif">NIYIBIZI</text>
-            <text x="88" y="287" text-anchor="middle" font-size="5.5" fill="rgba(255,255,255,.7)" font-family="sans-serif">CM</text>
-            <rect x="76" y="297" width="24" height="9" rx="2.5" fill="rgba(0,0,0,.45)"/>
-            <text x="88" y="304" text-anchor="middle" font-size="6" fill="white" font-family="sans-serif">#8</text>
-
-            <g filter="url(#shadow0)"><circle cx="180" cy="272" r="15" fill="#15803d" stroke="white" stroke-width="1.8"/></g>
-            <text x="180" y="268" text-anchor="middle" font-size="5.8" font-weight="700" fill="white" font-family="sans-serif">UWIMANA</text>
-            <text x="180" y="277" text-anchor="middle" font-size="5.5" fill="rgba(255,255,255,.7)" font-family="sans-serif">DM</text>
-            <rect x="168" y="287" width="24" height="9" rx="2.5" fill="rgba(0,0,0,.45)"/>
-            <text x="180" y="294" text-anchor="middle" font-size="6" fill="white" font-family="sans-serif">#6</text>
-
-            <g filter="url(#shadow0)"><circle cx="272" cy="282" r="15" fill="#15803d" stroke="white" stroke-width="1.8"/></g>
-            <text x="272" y="278" text-anchor="middle" font-size="5.8" font-weight="700" fill="white" font-family="sans-serif">HABIMANA</text>
-            <text x="272" y="287" text-anchor="middle" font-size="5.5" fill="rgba(255,255,255,.7)" font-family="sans-serif">CM</text>
-            <rect x="260" y="297" width="24" height="9" rx="2.5" fill="rgba(0,0,0,.45)"/>
-            <text x="272" y="304" text-anchor="middle" font-size="6" fill="white" font-family="sans-serif">#10</text>
-
-            <!-- FWD 3 -->
-            <g filter="url(#shadow0)"><circle cx="78" cy="172" r="15" fill="#dc2626" stroke="white" stroke-width="1.8"/></g>
-            <text x="78" y="168" text-anchor="middle" font-size="5.5" font-weight="700" fill="white" font-family="sans-serif">MUNYANEZA</text>
-            <text x="78" y="177" text-anchor="middle" font-size="5.5" fill="rgba(255,255,255,.7)" font-family="sans-serif">LW</text>
-            <rect x="66" y="187" width="24" height="9" rx="2.5" fill="rgba(0,0,0,.45)"/>
-            <text x="78" y="194" text-anchor="middle" font-size="6" fill="white" font-family="sans-serif">#11</text>
-
-            <g filter="url(#shadow0)"><circle cx="180" cy="158" r="15" fill="#dc2626" stroke="white" stroke-width="1.8"/></g>
-            <text x="180" y="154" text-anchor="middle" font-size="5.5" font-weight="700" fill="white" font-family="sans-serif">NDAYISHIM.</text>
-            <text x="180" y="163" text-anchor="middle" font-size="5.5" fill="rgba(255,255,255,.7)" font-family="sans-serif">ST</text>
-            <rect x="168" y="173" width="24" height="9" rx="2.5" fill="rgba(0,0,0,.45)"/>
-            <text x="180" y="180" text-anchor="middle" font-size="6" fill="white" font-family="sans-serif">#9</text>
-
-            <g filter="url(#shadow0)"><circle cx="282" cy="172" r="15" fill="#dc2626" stroke="white" stroke-width="1.8"/></g>
-            <text x="282" y="168" text-anchor="middle" font-size="5.5" font-weight="700" fill="white" font-family="sans-serif">IRADUKUNDA</text>
-            <text x="282" y="177" text-anchor="middle" font-size="5.5" fill="rgba(255,255,255,.7)" font-family="sans-serif">RW</text>
-            <rect x="270" y="187" width="24" height="9" rx="2.5" fill="rgba(0,0,0,.45)"/>
-            <text x="282" y="194" text-anchor="middle" font-size="6" fill="white" font-family="sans-serif">#7</text>
+            <!-- Dynamically Render Home Starters on Pitch -->
+            <?php foreach ($homePlayers as $p): 
+                $cx = $p['x'];
+                $cy = $p['y'];
+                $color = mapPositionTypeColor($p['posType']);
+            ?>
+                <g filter="url(#shadow0)" transform="translate(<?= $cx; ?>, <?= $cy; ?>)">
+                    <?php if ($p['img']): ?>
+                        <!-- Dynamic photo with clip mask -->
+                        <image href="<?= e($p['img']); ?>" x="-15" y="-15" width="30" height="30" clip-path="url(#circleClipIndex)" />
+                        <circle cx="0" cy="0" r="15" fill="none" stroke="white" stroke-width="1.8" />
+                    <?php else: ?>
+                        <!-- Initials fallback -->
+                        <circle cx="0" cy="0" r="15" fill="<?= $color; ?>" stroke="white" stroke-width="1.8" />
+                        <text x="0" y="2.5" text-anchor="middle" font-size="6.2" font-weight="700" fill="white" font-family="Barlow,sans-serif"><?= e($p['short']); ?></text>
+                    <?php endif; ?>
+                    
+                    <!-- Jersey number override badge -->
+                    <rect x="-12" y="17" width="24" height="9" rx="2.5" fill="rgba(0,0,0,.5)" />
+                    <text x="0" y="24" text-anchor="middle" font-size="6.5" font-weight="700" fill="white" font-family="Barlow,sans-serif">#<?= $p['num']; ?></text>
+                    
+                    <!-- Player last name label outside photo circle for legibility -->
+                    <text x="0" y="-18" text-anchor="middle" font-size="6.5" font-weight="800" fill="white" font-family="Barlow,sans-serif" style="text-shadow: 0 1px 2px rgba(0,0,0,0.85);"><?= e(strtoupper($p['short'])); ?></text>
+                </g>
+            <?php endforeach; ?>
 
             <!-- Legend -->
             <rect x="22" y="484" width="316" height="14" rx="3" fill="rgba(0,0,0,.25)"/>
@@ -836,79 +963,70 @@ function mapPositionType($pos) {
             <path d="M 22 30 A 8 8 0 0 1 30 20" fill="none" stroke="rgba(255,255,255,.35)" stroke-width="1"/>
             <path d="M 338 30 A 8 8 0 0 0 330 20" fill="none" stroke="rgba(255,255,255,.35)" stroke-width="1"/>
             <path d="M 22 470 A 8 8 0 0 0 30 480" fill="none" stroke="rgba(255,255,255,.35)" stroke-width="1"/>
+            <defs>
+              <linearGradient id="gfg1" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#185e2d"/>
+                <stop offset="25%" stop-color="#1d6b34"/>
+                <stop offset="50%" stop-color="#196030"/>
+                <stop offset="75%" stop-color="#1d6b34"/>
+                <stop offset="100%" stop-color="#185e2d"/>
+              </linearGradient>
+              <filter id="shadow1" x="-20%" y="-20%" width="140%" height="140%">
+                <feDropShadow dx="0" dy="1" stdDeviation="2" flood-color="rgba(0,0,0,.5)"/>
+              </filter>
+            </defs>
+            <rect width="360" height="500" rx="10" fill="url(#gfg1)"/>
+            <rect x="0" y="0" width="360" height="42" rx="10" fill="rgba(0,0,0,.07)"/>
+            <rect x="0" y="84" width="360" height="42" fill="rgba(0,0,0,.07)"/>
+            <rect x="0" y="168" width="360" height="42" fill="rgba(0,0,0,.07)"/>
+            <rect x="0" y="252" width="360" height="42" fill="rgba(0,0,0,.07)"/>
+            <rect x="0" y="336" width="360" height="42" fill="rgba(0,0,0,.07)"/>
+            <rect x="0" y="420" width="360" height="42" fill="rgba(0,0,0,.07)"/>
+            <rect x="22" y="20" width="316" height="460" rx="4" fill="none" stroke="rgba(255,255,255,.5)" stroke-width="1.5"/>
+            <line x1="22" y1="250" x2="338" y2="250" stroke="rgba(255,255,255,.5)" stroke-width="1.2"/>
+            <circle cx="180" cy="250" r="42" fill="none" stroke="rgba(255,255,255,.5)" stroke-width="1.2"/>
+            <circle cx="180" cy="250" r="3.5" fill="rgba(255,255,255,.7)"/>
+            <rect x="98" y="20" width="164" height="68" fill="none" stroke="rgba(255,255,255,.5)" stroke-width="1.2"/>
+            <rect x="128" y="20" width="104" height="30" fill="none" stroke="rgba(255,255,255,.5)" stroke-width="1.2"/>
+            <circle cx="180" cy="82" r="3" fill="rgba(255,255,255,.6)"/>
+            <path d="M 132 90 A 40 40 0 0 1 228 90" fill="none" stroke="rgba(255,255,255,.38)" stroke-width="1.1"/>
+            <rect x="98" y="412" width="164" height="68" fill="none" stroke="rgba(255,255,255,.5)" stroke-width="1.2"/>
+            <rect x="128" y="450" width="104" height="30" fill="none" stroke="rgba(255,255,255,.5)" stroke-width="1.2"/>
+            <circle cx="180" cy="418" r="3" fill="rgba(255,255,255,.6)"/>
+            <path d="M 132 410 A 40 40 0 0 0 228 410" fill="none" stroke="rgba(255,255,255,.38)" stroke-width="1.1"/>
+            <path d="M 22 30 A 8 8 0 0 1 30 20" fill="none" stroke="rgba(255,255,255,.35)" stroke-width="1"/>
+            <path d="M 338 30 A 8 8 0 0 0 330 20" fill="none" stroke="rgba(255,255,255,.35)" stroke-width="1"/>
+            <path d="M 22 470 A 8 8 0 0 0 30 480" fill="none" stroke="rgba(255,255,255,.35)" stroke-width="1"/>
             <path d="M 338 470 A 8 8 0 0 1 330 480" fill="none" stroke="rgba(255,255,255,.35)" stroke-width="1"/>
+            <!-- Formation badge -->
             <rect x="146" y="7" width="68" height="14" rx="4" fill="rgba(124,58,237,.9)"/>
-            <text x="180" y="17.5" text-anchor="middle" font-size="8" font-weight="700" fill="white" font-family="Barlow,sans-serif" letter-spacing=".5">4 – 4 – 2</text>
+            <text x="180" y="17.5" text-anchor="middle" font-size="8" font-weight="700" fill="white" font-family="Barlow,sans-serif" letter-spacing=".5"><?= e($awayFormation); ?></text>
 
-            <!-- GK -->
-            <g filter="url(#shadow1)"><circle cx="180" cy="455" r="17" fill="#F97316" stroke="white" stroke-width="2"/></g>
-            <text x="180" y="451" text-anchor="middle" font-size="6.5" font-weight="700" fill="white" font-family="Barlow,sans-serif">HAKIZIM.</text>
-            <text x="180" y="461" text-anchor="middle" font-size="6" fill="rgba(255,255,255,.75)" font-family="sans-serif">GK</text>
-            <rect x="168" y="472" width="24" height="10" rx="3" fill="rgba(0,0,0,.5)"/>
-            <text x="180" y="479.5" text-anchor="middle" font-size="6.5" fill="white" font-family="Barlow,sans-serif" font-weight="700">#1</text>
-
-            <!-- DEF 4 -->
-            <g filter="url(#shadow1)"><circle cx="55" cy="375" r="15" fill="#1E3A8A" stroke="white" stroke-width="1.8"/></g>
-            <text x="55" y="371" text-anchor="middle" font-size="5.8" font-weight="700" fill="white" font-family="sans-serif">NZEYIM.</text>
-            <text x="55" y="380" text-anchor="middle" font-size="5.5" fill="rgba(255,255,255,.7)" font-family="sans-serif">RB</text>
-            <rect x="43" y="390" width="24" height="9" rx="2.5" fill="rgba(0,0,0,.45)"/>
-            <text x="55" y="397" text-anchor="middle" font-size="6" fill="white" font-family="sans-serif">#2</text>
-
-            <g filter="url(#shadow1)"><circle cx="128" cy="375" r="15" fill="#1E3A8A" stroke="white" stroke-width="1.8"/></g>
-            <text x="128" y="371" text-anchor="middle" font-size="6" font-weight="700" fill="white" font-family="sans-serif">KAREMERA</text>
-            <text x="128" y="380" text-anchor="middle" font-size="5.5" fill="rgba(255,255,255,.7)" font-family="sans-serif">CB</text>
-            <rect x="116" y="390" width="24" height="9" rx="2.5" fill="rgba(0,0,0,.45)"/>
-            <text x="128" y="397" text-anchor="middle" font-size="6" fill="white" font-family="sans-serif">#5</text>
-
-            <g filter="url(#shadow1)"><circle cx="232" cy="375" r="15" fill="#1E3A8A" stroke="white" stroke-width="1.8"/></g>
-            <text x="232" y="371" text-anchor="middle" font-size="6" font-weight="700" fill="white" font-family="sans-serif">MUGENZI</text>
-            <text x="232" y="380" text-anchor="middle" font-size="5.5" fill="rgba(255,255,255,.7)" font-family="sans-serif">CB</text>
-            <rect x="220" y="390" width="24" height="9" rx="2.5" fill="rgba(0,0,0,.45)"/>
-            <text x="232" y="397" text-anchor="middle" font-size="6" fill="white" font-family="sans-serif">#4</text>
-
-            <g filter="url(#shadow1)"><circle cx="305" cy="375" r="15" fill="#1E3A8A" stroke="white" stroke-width="1.8"/></g>
-            <text x="305" y="371" text-anchor="middle" font-size="5.8" font-weight="700" fill="white" font-family="sans-serif">BIZIMANA</text>
-            <text x="305" y="380" text-anchor="middle" font-size="5.5" fill="rgba(255,255,255,.7)" font-family="sans-serif">LB</text>
-            <rect x="293" y="390" width="24" height="9" rx="2.5" fill="rgba(0,0,0,.45)"/>
-            <text x="305" y="397" text-anchor="middle" font-size="6" fill="white" font-family="sans-serif">#3</text>
-
-            <!-- MID 4 -->
-            <g filter="url(#shadow1)"><circle cx="58" cy="278" r="15" fill="#15803d" stroke="white" stroke-width="1.8"/></g>
-            <text x="58" y="274" text-anchor="middle" font-size="5.8" font-weight="700" fill="white" font-family="sans-serif">TUYISENGE</text>
-            <text x="58" y="283" text-anchor="middle" font-size="5.5" fill="rgba(255,255,255,.7)" font-family="sans-serif">RM</text>
-            <rect x="46" y="293" width="24" height="9" rx="2.5" fill="rgba(0,0,0,.45)"/>
-            <text x="58" y="300" text-anchor="middle" font-size="6" fill="white" font-family="sans-serif">#8</text>
-
-            <g filter="url(#shadow1)"><circle cx="135" cy="268" r="15" fill="#15803d" stroke="white" stroke-width="1.8"/></g>
-            <text x="135" y="264" text-anchor="middle" font-size="5.8" font-weight="700" fill="white" font-family="sans-serif">NZAMWITA</text>
-            <text x="135" y="273" text-anchor="middle" font-size="5.5" fill="rgba(255,255,255,.7)" font-family="sans-serif">CM</text>
-            <rect x="123" y="283" width="24" height="9" rx="2.5" fill="rgba(0,0,0,.45)"/>
-            <text x="135" y="290" text-anchor="middle" font-size="6" fill="white" font-family="sans-serif">#6</text>
-
-            <g filter="url(#shadow1)"><circle cx="225" cy="268" r="15" fill="#15803d" stroke="white" stroke-width="1.8"/></g>
-            <text x="225" y="264" text-anchor="middle" font-size="5.5" font-weight="700" fill="white" font-family="sans-serif">GATETE</text>
-            <text x="225" y="273" text-anchor="middle" font-size="5.5" fill="rgba(255,255,255,.7)" font-family="sans-serif">CM</text>
-            <rect x="213" y="283" width="24" height="9" rx="2.5" fill="rgba(0,0,0,.45)"/>
-            <text x="225" y="290" text-anchor="middle" font-size="6" fill="white" font-family="sans-serif">#10</text>
-
-            <g filter="url(#shadow1)"><circle cx="302" cy="278" r="15" fill="#15803d" stroke="white" stroke-width="1.8"/></g>
-            <text x="302" y="274" text-anchor="middle" font-size="5.5" font-weight="700" fill="white" font-family="sans-serif">HABIYAR.</text>
-            <text x="302" y="283" text-anchor="middle" font-size="5.5" fill="rgba(255,255,255,.7)" font-family="sans-serif">LM</text>
-            <rect x="290" y="293" width="24" height="9" rx="2.5" fill="rgba(0,0,0,.45)"/>
-            <text x="302" y="300" text-anchor="middle" font-size="6" fill="white" font-family="sans-serif">#7</text>
-
-            <!-- FWD 2 -->
-            <g filter="url(#shadow1)"><circle cx="128" cy="162" r="15" fill="#dc2626" stroke="white" stroke-width="1.8"/></g>
-            <text x="128" y="158" text-anchor="middle" font-size="6.2" font-weight="700" fill="white" font-family="sans-serif">UWAYO</text>
-            <text x="128" y="167" text-anchor="middle" font-size="5.5" fill="rgba(255,255,255,.7)" font-family="sans-serif">ST</text>
-            <rect x="116" y="177" width="24" height="9" rx="2.5" fill="rgba(0,0,0,.45)"/>
-            <text x="128" y="184" text-anchor="middle" font-size="6" fill="white" font-family="sans-serif">#9</text>
-
-            <g filter="url(#shadow1)"><circle cx="232" cy="162" r="15" fill="#dc2626" stroke="white" stroke-width="1.8"/></g>
-            <text x="232" y="158" text-anchor="middle" font-size="5.5" font-weight="700" fill="white" font-family="sans-serif">NSANZIM.</text>
-            <text x="232" y="167" text-anchor="middle" font-size="5.5" fill="rgba(255,255,255,.7)" font-family="sans-serif">ST</text>
-            <rect x="220" y="177" width="24" height="9" rx="2.5" fill="rgba(0,0,0,.45)"/>
-            <text x="232" y="184" text-anchor="middle" font-size="6" fill="white" font-family="sans-serif">#11</text>
+            <!-- Dynamically Render Away Starters on Pitch -->
+            <?php foreach ($awayPlayers as $p): 
+                $cx = $p['x'];
+                $cy = $p['y'];
+                $color = mapPositionTypeColor($p['posType']);
+            ?>
+                <g filter="url(#shadow1)" transform="translate(<?= $cx; ?>, <?= $cy; ?>)">
+                    <?php if ($p['img']): ?>
+                        <!-- Dynamic photo with clip mask -->
+                        <image href="<?= e($p['img']); ?>" x="-15" y="-15" width="30" height="30" clip-path="url(#circleClipIndex)" />
+                        <circle cx="0" cy="0" r="15" fill="none" stroke="white" stroke-width="1.8" />
+                    <?php else: ?>
+                        <!-- Initials fallback -->
+                        <circle cx="0" cy="0" r="15" fill="<?= $color; ?>" stroke="white" stroke-width="1.8" />
+                        <text x="0" y="2.5" text-anchor="middle" font-size="6.2" font-weight="700" fill="white" font-family="Barlow,sans-serif"><?= e($p['short']); ?></text>
+                    <?php endif; ?>
+                    
+                    <!-- Jersey number override badge -->
+                    <rect x="-12" y="17" width="24" height="9" rx="2.5" fill="rgba(0,0,0,.5)" />
+                    <text x="0" y="24" text-anchor="middle" font-size="6.5" font-weight="700" fill="white" font-family="Barlow,sans-serif">#<?= $p['num']; ?></text>
+                    
+                    <!-- Player last name label outside photo circle for legibility -->
+                    <text x="0" y="-18" text-anchor="middle" font-size="6.5" font-weight="800" fill="white" font-family="Barlow,sans-serif" style="text-shadow: 0 1px 2px rgba(0,0,0,0.85);"><?= e(strtoupper($p['short'])); ?></text>
+                </g>
+            <?php endforeach; ?>
 
             <!-- Legend -->
             <rect x="22" y="484" width="316" height="14" rx="3" fill="rgba(0,0,0,.25)"/>
@@ -1094,89 +1212,23 @@ function mapPositionType($pos) {
 </footer>
 
 <script>
-// Dynamic Teams injection from the seeded database!
+// Dynamic Teams injection from the active database rosters!
 const TEAMS = [
   {
-    name: "APR FC",
-    formation: "4-3-3",
+    name: "<?= e($homeName); ?>",
+    formation: "<?= e($homeFormation); ?>",
     color: "#1E3A8A",
-    img: "https://images.unsplash.com/photo-1587329310690-91114ac008f0?w=50&q=80",
-    players: <?php if (!empty($aprDbPlayers)): 
-      $formatted = array_map(function($p) {
-        return [
-          'name' => $p['first_name'] . ' ' . $p['last_name'],
-          'short' => strtoupper(substr($p['first_name'], 0, 3)),
-          'num' => (int) $p['jersey_number'],
-          'pos' => mapPositionAbbrev($p['position']),
-          'posType' => mapPositionType($p['position']),
-          'img' => $p['photo_pl'] ?: 'https://images.unsplash.com/photo-1627483297886-49710ae1fc22?w=60&q=80'
-        ];
-      }, $aprDbPlayers);
-      echo json_encode($formatted);
-    else: ?>
-    [
-      {name:"Nshuti",short:"NSH",num:1,pos:"GK",posType:"gk",img:"https://images.unsplash.com/photo-1627483297886-49710ae1fc22?w=60&q=80"},
-      {name:"Safari",short:"SAF",num:3,pos:"RB",posType:"def",img:"https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?w=60&q=80"},
-      {name:"Hakizimana",short:"HAK",num:5,pos:"CB",posType:"def",img:"https://images.unsplash.com/photo-1543326727-cf6c39e8f84c?w=60&q=80"},
-      {name:"Mutesa",short:"MUT",num:4,pos:"CB",posType:"def",img:"https://images.unsplash.com/photo-1560272564-c83b66b1ad12?w=60&q=80"},
-      {name:"Rugira",short:"RUG",num:12,pos:"LB",posType:"def",img:"https://images.unsplash.com/photo-1508098682722-e99c43a406b2?w=60&q=80"},
-      {name:"Niyibizi",short:"NIY",num:8,pos:"CM",posType:"mid",img:"https://images.unsplash.com/photo-1606925797300-0b35e9d1794e?w=60&q=80"},
-      {name:"Uwimana",short:"UWI",num:6,pos:"DM",posType:"mid",img:"https://images.unsplash.com/photo-1519766304817-4f37bda74a26?w=60&q=80"},
-      {name:"Habimana",short:"HAB",num:10,pos:"CM",posType:"mid",img:"https://images.unsplash.com/photo-1574629810360-7efbbe195018?w=60&q=80"},
-      {name:"Munyaneza",short:"MUN",num:11,pos:"LW",posType:"fwd",img:"https://images.unsplash.com/photo-1459865264687-595d652de67e?w=60&q=80"},
-      {name:"Ndayishim.",short:"NDA",num:9,pos:"ST",posType:"fwd",img:"https://images.unsplash.com/photo-1626248801379-51a0748a5f96?w=60&q=80"},
-      {name:"Iradukunda",short:"IRA",num:7,pos:"RW",posType:"fwd",img:"https://images.unsplash.com/photo-1487466365202-1afdb86c764e?w=60&q=80"},
-    ]
-    <?php endif; ?>,
-    bench: [
-      {name:"Nkurunziza",num:16,pos:"GK"},{name:"Cyuzuzo",num:14,pos:"DEF"},{name:"Ishimwe",num:18,pos:"MID"}
-    ],
-    positions: [
-      {x:170,y:445},{x:55,y:370},{x:125,y:370},{x:220,y:370},{x:290,y:370},
-      {x:90,y:280},{x:170,y:268},{x:255,y:280},
-      {x:78,y:172},{x:170,y:158},{x:265,y:172}
-    ]
+    img: "<?= e($homeLogo ?: 'https://images.unsplash.com/photo-1587329310690-91114ac008f0?w=50&q=80'); ?>",
+    players: <?= json_encode($homePlayers); ?>,
+    bench: <?= json_encode($homeBench); ?>
   },
   {
-    name: "Police FC",
-    formation: "4-4-2",
+    name: "<?= e($awayName); ?>",
+    formation: "<?= e($awayFormation); ?>",
     color: "#7c3aed",
-    img: "https://images.unsplash.com/photo-1606925797300-0b35e9d1794e?w=50&q=80",
-    players: <?php if (!empty($policeDbPlayers)): 
-      $formatted = array_map(function($p) {
-        return [
-          'name' => $p['first_name'] . ' ' . $p['last_name'],
-          'short' => strtoupper(substr($p['first_name'], 0, 3)),
-          'num' => (int) $p['jersey_number'],
-          'pos' => mapPositionAbbrev($p['position']),
-          'posType' => mapPositionType($p['position']),
-          'img' => $p['photo_pl'] ?: 'https://images.unsplash.com/photo-1627483297886-49710ae1fc22?w=60&q=80'
-        ];
-      }, $policeDbPlayers);
-      echo json_encode($formatted);
-    else: ?>
-    [
-      {name:"Hakizim.",short:"HKZ",num:1,pos:"GK",posType:"gk",img:"https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?w=60&q=80"},
-      {name:"Nzeyimana",short:"NZE",num:2,pos:"RB",posType:"def",img:"https://images.unsplash.com/photo-1543326727-cf6c39e8f84c?w=60&q=80"},
-      {name:"Karemera",short:"KAR",num:5,pos:"CB",posType:"def",img:"https://images.unsplash.com/photo-1560272564-c83b66b1ad12?w=60&q=80"},
-      {name:"Mugenzi",short:"MUG",num:4,pos:"CB",posType:"def",img:"https://images.unsplash.com/photo-1508098682722-e99c43a406b2?w=60&q=80"},
-      {name:"Bizimana",short:"BIZ",num:3,pos:"LB",posType:"def",img:"https://images.unsplash.com/photo-1627483297886-49710ae1fc22?w=60&q=80"},
-      {name:"Tuyisenge",short:"TUY",num:8,pos:"RM",posType:"mid",img:"https://images.unsplash.com/photo-1606925797300-0b35e9d1794e?w=60&q=80"},
-      {name:"Nzamwita",short:"NZA",num:6,pos:"CM",posType:"mid",img:"https://images.unsplash.com/photo-1519766304817-4f37bda74a26?w=60&q=80"},
-      {name:"Habiyaremye",short:"HBY",num:7,pos:"LM",posType:"mid",img:"https://images.unsplash.com/photo-1574629810360-7efbbe195018?w=60&q=80"},
-      {name:"Gatete",short:"GAT",num:10,pos:"CM",posType:"mid",img:"https://images.unsplash.com/photo-1459865264687-595d652de67e?w=60&q=80"},
-      {name:"Uwayo",short:"UWA",num:9,pos:"ST",posType:"fwd",img:"https://images.unsplash.com/photo-1626248801379-51a0748a5f96?w=60&q=80"},
-      {name:"Nsanzimana",short:"NSN",num:11,pos:"ST",posType:"fwd",img:"https://images.unsplash.com/photo-1487466365202-1afdb86c764e?w=60&q=80"},
-    ]
-    <?php endif; ?>,
-    bench: [
-      {name:"Rugamba",num:13,pos:"GK"},{name:"Ingabire",num:15,pos:"DEF"},{name:"Gahunde",num:17,pos:"MID"}
-    ],
-    positions: [
-      {x:170,y:445},{x:55,y:370},{x:125,y:370},{x:220,y:370},{x:290,y:370},
-      {x:62,y:275},{x:135,y:265},{x:210,y:265},{x:285,y:275},
-      {x:130,y:158},{x:215,y:158}
-    ]
+    img: "<?= e($awayLogo ?: 'https://images.unsplash.com/photo-1606925797300-0b35e9d1794e?w=50&q=80'); ?>",
+    players: <?= json_encode($awayPlayers); ?>,
+    bench: <?= json_encode($awayBench); ?>
   }
 ];
 
@@ -1189,7 +1241,7 @@ function renderSidebar(teamIdx) {
   document.getElementById('pi-team-name').textContent = team.name;
   document.getElementById('pi-formation-badge').textContent = team.formation;
   const title = document.getElementById('ps-match-title');
-  title.innerHTML = teamIdx===0 ? 'APR FC <span>vs Police FC</span>' : 'Police FC <span>vs APR FC</span>';
+  title.innerHTML = teamIdx===0 ? '<?= e($homeName); ?> <span>vs <?= e($awayName); ?></span>' : '<?= e($awayName); ?> <span>vs <?= e($homeName); ?></span>';
   const label = document.getElementById('ps-formation-label');
   label.textContent = 'Formation: ' + team.formation;
   const list = document.getElementById('pi-players-list');

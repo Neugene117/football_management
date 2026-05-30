@@ -69,6 +69,7 @@ $routes = [
     'news' => 'news.php',
     'notifications' => 'notifications.php',
     'profile' => 'profile.php',
+    'lineup_prepare' => 'lineup_prepare.php',
 ];
 
 $pageFile = $routes[$page] ?? 'dashboard.php';
@@ -92,6 +93,7 @@ $titles = [
     'results' => 'Match Results',
     'news' => 'Federation News',
     'profile' => 'My Profile',
+    'lineup_prepare' => 'Prepare Match Lineup',
 ];
 
 $notifIconMap = [

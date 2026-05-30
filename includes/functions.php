@@ -741,6 +741,7 @@ function page_permission_slug($page)
         'lineups' => 'lineups.view',
         'matches' => 'matches.view',
         'results' => 'results.view',
+        'lineup_prepare' => 'lineups.submit',
     ];
 
     return $map[$page] ?? null;

@@ -511,12 +511,13 @@ textarea.form-control-custom {
                             <th>Position</th>
                             <th>Jersey #</th>
                             <th>Nationality</th>
+                            <th>Appearances</th>
                             <th>Status</th>
                         </tr>
                     </thead>
                     <tbody>
                         <?php if (empty($players)): ?>
-                            <tr><td colspan="6"><div class="empty-state">No players registered yet.</div></td></tr>
+                            <tr><td colspan="7"><div class="empty-state">No players registered yet.</div></td></tr>
                         <?php else: ?>
                             <?php foreach ($players as $p): ?>
                                 <tr class="player-row" data-position="<?= e(strtolower($p['position'])); ?>">
@@ -539,6 +540,20 @@ textarea.form-control-custom {
                                     <td><span class="badge" style="background: rgba(11, 31, 58, 0.05); color: var(--navy-800); text-transform: capitalize;"><?= e($p['position']); ?></span></td>
                                     <td><?= e($p['jersey_number'] ?? '-'); ?></td>
                                     <td><?= e($p['nationality'] ?: '-'); ?></td>
+                                    <td>
+                                        <?php
+                                        $appCount = (int) (db_fetch_one("
+                                            SELECT COUNT(DISTINCT m.id) total 
+                                            FROM lineup_players lp 
+                                            JOIN match_lineups ml ON ml.id = lp.lineup_id 
+                                            JOIN matches m ON m.id = ml.match_id 
+                                            WHERE lp.player_id = ? 
+                                              AND ml.status = 'approved' 
+                                              AND m.status IN ('completed', 'in_progress', 'lineup_approved')
+                                        ", 'i', [$p['id']])['total'] ?? 0);
+                                        ?>
+                                        <span class="badge" style="font-weight: 700; background: rgba(21, 128, 61, 0.08); color: #15803d; border: 1px solid rgba(21, 128, 61, 0.15); font-size: 11px; border-radius: 6px; padding: 4px 8px;"><?= $appCount; ?> matches</span>
+                                    </td>
                                     <td>
                                         <?php if ($p['status'] === 'inactive'): ?>
                                             <span class="badge badge-warning">Pending Approval</span>

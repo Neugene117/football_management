@@ -31,13 +31,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $teamId = (int) ($m['home_team_id'] ?? 0);
   }
 
-  $ok = db_execute('INSERT INTO match_lineups (match_id, team_id, formation_id, status, submitted_at, submitted_by, is_public) VALUES (?, ?, ?, ?, NOW(), ?, ?)', 'iiisii', [$matchId, $teamId, $formationId, 'submitted', (int) current_user()['id'], $visibility]);
+  $ok = db_execute('INSERT INTO match_lineups (match_id, team_id, formation_id, status, submitted_at, submitted_by, approved_by, approved_at, is_public) VALUES (?, ?, ?, ?, NOW(), ?, ?, NOW(), ?)', 'iiisiii', [$matchId, $teamId, $formationId, 'approved', (int) current_user()['id'], (int) current_user()['id'], $visibility]);
 
   if ($ok) {
     $lid = db_last_id();
-    db_execute('INSERT INTO approvals (item_type, item_id, submitted_by, status) VALUES (?, ?, ?, ?)', 'siis', ['lineup', $lid, (int) current_user()['id'], 'pending']);
+    db_execute('INSERT INTO approvals (item_type, item_id, submitted_by, status, approved_by, approved_at) VALUES (?, ?, ?, ?, ?, NOW())', 'siiii', ['lineup', $lid, (int) current_user()['id'], 'approved', (int) current_user()['id']]);
     log_action('lineup_submitted', 'lineups', 'match_lineups', $lid);
-    set_flash('success', 'Lineup submitted for federation approval.');
+    set_flash('success', 'Lineup submitted and approved successfully! The dashboard and main page have been updated.');
   } else {
     set_flash('danger', 'Failed to submit lineup.');
   }
