@@ -81,6 +81,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <input type="password" name="password" placeholder="Password" required>
         <a class="signin-help" href="mailto:<?= e($settings['system_email']); ?>">Forgot your password?</a>
         <button class="btn btn-primary btn-full signin-submit" type="submit">Sign In</button>
+        <a class="btn btn-light btn-full" href="index.php" style="margin-top: 10px; text-decoration: none; display: inline-flex; justify-content: center; align-items: center;">Back to Index</a>
       </form>
     </section>
 
