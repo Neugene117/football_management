@@ -10,6 +10,7 @@ $featuredMatch = db_fetch_one("
     INNER JOIN teams at ON at.id = m.away_team_id
     LEFT JOIN match_results mr ON mr.match_id = m.id AND mr.status = 'approved'
     LEFT JOIN stadiums s ON s.id = m.stadium_id
+    WHERE m.status IN ('scheduled', 'in_progress', 'completed', 'cancelled')
     ORDER BY (m.status = 'in_progress') DESC, m.match_date DESC, m.match_time DESC LIMIT 1
 ");
 
@@ -21,6 +22,7 @@ $matchdayMatches = db_fetch_all("
     INNER JOIN teams at ON at.id = m.away_team_id
     LEFT JOIN match_results mr ON mr.match_id = m.id AND mr.status = 'approved'
     LEFT JOIN stadiums s ON s.id = m.stadium_id
+    WHERE m.status IN ('scheduled', 'in_progress', 'completed', 'cancelled')
     ORDER BY (m.status = 'in_progress') DESC, m.match_date DESC, m.match_time DESC LIMIT 3
 ");
 
@@ -68,7 +70,7 @@ $latestMatch = db_fetch_one("
     LEFT JOIN teams at ON at.id = m.away_team_id 
     LEFT JOIN stadiums s ON s.id = m.stadium_id 
     LEFT JOIN competitions c ON c.id = m.competition_id
-    WHERE m.status IN ('scheduled', 'lineup_pending', 'lineup_approved', 'in_progress', 'completed')
+    WHERE m.status IN ('scheduled', 'in_progress', 'completed', 'cancelled')
     ORDER BY (SELECT COUNT(*) FROM match_lineups WHERE match_id = m.id) DESC, last_lineup_update DESC, m.match_date DESC, m.id DESC 
     LIMIT 1
 ");

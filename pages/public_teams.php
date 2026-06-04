@@ -25,18 +25,18 @@ $teamsList = db_fetch_all("
         <div style="color: var(--text3); text-align: center; grid-column: 1 / -1; padding: 40px;">No registered clubs found.</div>
       <?php else: ?>
         <?php foreach ($teamsList as $team): ?>
-          <div class="team-card" data-search="<?= e(strtolower($team['name'] . ' ' . $team['city'] . ' ' . $team['stadium_name'])); ?>" style="background: #fff; border: 1px solid var(--gray-l); border-radius: var(--rl); overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.02); transition: transform 0.2s;">
-            <div class="tc-cover" style="height: 70px; background: linear-gradient(135deg, var(--navy) 0%, var(--navy-m) 100%);"></div>
+          <div class="team-card" onclick="location.href='teams.php?id=<?= (int) $team['id']; ?>'" data-search="<?= e(strtolower($team['name'] . ' ' . $team['city'] . ' ' . $team['stadium_name'])); ?>" style="background: #fff; border: 1px solid var(--gray-l); border-radius: var(--rl); overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.02); transition: transform 0.22s cubic-bezier(0.4, 0, 0.2, 1); cursor: pointer;">
+            <div class="tc-cover" style="height: 75px; background: linear-gradient(135deg, var(--navy) 0%, var(--navy-m) 100%); transition: filter 0.2s;"></div>
             <div class="tc-body" style="padding: 16px; text-align: center; position: relative;">
-              <div class="tc-logo" style="width: 58px; height: 58px; border: 3px solid #fff; border-radius: 50%; overflow: hidden; margin: -44px auto 8px; background: #fff; box-shadow: 0 4px 10px rgba(0,0,0,0.1);">
+              <div class="tc-logo" style="width: 60px; height: 60px; border: 3px solid #fff; border-radius: 50%; overflow: hidden; margin: -46px auto 8px; background: #fff; box-shadow: 0 4px 10px rgba(0,0,0,0.1); transition: transform 0.2s;">
                 <img src="<?= e($team['logo'] ?: 'https://images.unsplash.com/photo-1551958219-acbc595d9e15?w=120&q=80'); ?>" alt="Logo" style="width: 100%; height: 100%; object-fit: cover;"/>
               </div>
-              <h4 style="font-size: 14px; font-weight: 800; color: var(--text); margin-bottom: 2px;"><?= e($team['name']); ?></h4>
+              <h4 style="font-size: 14.5px; font-weight: 800; color: var(--text); margin-bottom: 2px;"><?= e($team['name']); ?></h4>
               <div style="font-size: 11px; color: var(--gray); font-weight: 600; margin-bottom: 10px;">📍 <?= e($team['city'] ?: 'Kigali'); ?></div>
               
-              <div style="display: flex; justify-content: center; gap: 10px; margin-bottom: 12px; font-size: 10px; font-weight: 700; color: var(--text2);">
-                <span style="background: var(--gray-ll); padding: 4px 8px; border-radius: 4px;">🏟️ <?= e($team['stadium_name'] ?: 'Home Arena'); ?></span>
-                <span style="background: var(--org-xl); color: var(--org-d); padding: 4px 8px; border-radius: 4px;">🏃‍♂️ <?= (int) $team['player_count']; ?> Players</span>
+              <div style="display: flex; justify-content: center; gap: 8px; margin-bottom: 12px; font-size: 10px; font-weight: 700; color: var(--text2);">
+                <span style="background: var(--gray-ll); padding: 4px 8px; border-radius: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 130px;">🏟️ <?= e($team['stadium_name'] ?: 'Home Arena'); ?></span>
+                <span style="background: var(--org-xl); color: var(--org-d); padding: 4px 8px; border-radius: 4px; white-space: nowrap;">🏃‍♂️ <?= (int) $team['player_count']; ?> Players</span>
               </div>
               <span class="tc-badge <?= $team['is_active'] ? 'ab' : 'ib'; ?>" style="font-size: 9px; font-weight: 700; padding: 2px 8px; border-radius: 4px;"><?= $team['is_active'] ? 'Active' : 'Inactive'; ?></span>
             </div>
@@ -46,3 +46,29 @@ $teamsList = db_fetch_all("
     </div>
   </div>
 </section>
+
+<style>
+.team-card:hover {
+  transform: translateY(-4px);
+  border-color: var(--org) !important;
+  box-shadow: 0 10px 20px rgba(249,115,22,0.06), 0 4px 12px rgba(0,0,0,0.03) !important;
+}
+.team-card:hover .tc-logo {
+  transform: scale(1.05);
+}
+</style>
+
+<script>
+function filterTeams() {
+    const q = document.getElementById('team-search').value.toLowerCase().trim();
+    const cards = document.querySelectorAll('.team-card');
+    cards.forEach(c => {
+        const searchVal = c.getAttribute('data-search') || '';
+        if (searchVal.indexOf(q) !== -1) {
+            c.style.display = 'block';
+        } else {
+            c.style.display = 'none';
+        }
+    });
+}
+</script>

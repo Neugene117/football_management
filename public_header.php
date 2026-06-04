@@ -17,14 +17,15 @@ $tickerMatches = db_fetch_all("
     INNER JOIN teams ht ON ht.id = m.home_team_id
     INNER JOIN teams at ON at.id = m.away_team_id
     LEFT JOIN match_results mr ON mr.match_id = m.id AND mr.status = 'approved'
+    WHERE m.status IN ('scheduled', 'in_progress', 'completed', 'cancelled')
     ORDER BY m.match_date DESC, m.match_time DESC LIMIT 6
 ");
 
 // 2. Fetch Hero counts (needed for Home page hero stats)
 $totalTeams = db_table_count('teams');
 $totalPlayers = db_table_count('players');
-$totalMatches = db_table_count('matches');
-$totalMatchdays = (int) (db_fetch_one("SELECT COUNT(DISTINCT matchday) AS total FROM matches")['total'] ?? 0);
+$totalMatches = db_table_count('matches', "status IN ('scheduled', 'in_progress', 'completed', 'cancelled')");
+$totalMatchdays = (int) (db_fetch_one("SELECT COUNT(DISTINCT matchday) AS total FROM matches WHERE status IN ('scheduled', 'in_progress', 'completed', 'cancelled')")['total'] ?? 0);
 
 $activeTeams = db_table_count('teams', 'is_active = 1');
 $scheduledMatches = db_table_count('matches', "status = 'scheduled'");

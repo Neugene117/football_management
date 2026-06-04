@@ -23,7 +23,7 @@ $rows = $myTeamId > 0
                 <td><?= e($m['round'] ?: '-'); ?></td>
                 <td><?= status_badge($m['status']); ?></td>
                 <td>
-                  <?php if (in_array($m['status'], ['lineup_approved', 'in_progress'], true)): ?>
+                  <?php if (in_array($m['status'], ['scheduled', 'lineup_approved', 'in_progress'], true)): ?>
                     <a href="index.php?page=lineup_prepare&match_id=<?= (int) $m['id']; ?>" class="btn btn-primary btn-sm" style="display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">
                       <i class="fa-solid fa-futbol" style="font-size: 10px;"></i> Prep Lineup
                     </a>

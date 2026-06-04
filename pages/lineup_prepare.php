@@ -39,9 +39,9 @@ if ($myTeamId !== (int) $match['home_team_id'] && $myTeamId !== (int) $match['aw
     redirect_to('index.php?page=lineups');
 }
 
-// Enforce Match Status constraint: must be lineup_approved or in_progress
-if (!in_array($match['status'], ['lineup_approved', 'in_progress'], true)) {
-    set_flash('danger', 'Match preparation is only accessible when the match status is lineup_approved or in_progress.');
+// Enforce Match Status constraint: must be scheduled, lineup_approved, or in_progress
+if (!in_array($match['status'], ['scheduled', 'lineup_approved', 'in_progress'], true)) {
+    set_flash('danger', 'Match preparation is only accessible when the match status is scheduled, lineup_approved or in_progress.');
     redirect_to('index.php?page=lineups');
 }
 

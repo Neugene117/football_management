@@ -1137,4 +1137,40 @@ function ensure_sample_data() {
     }
 }
 
+if (!function_exists('mapPositionAbbrev')) {
+    function mapPositionAbbrev($pos) {
+        $map = [
+            'goalkeeper' => 'GK',
+            'defender' => 'CB',
+            'midfielder' => 'CM',
+            'forward' => 'ST'
+        ];
+        return $map[strtolower((string)$pos)] ?? 'CM';
+    }
+}
+
+if (!function_exists('mapPositionType')) {
+    function mapPositionType($pos) {
+        $map = [
+            'goalkeeper' => 'gk',
+            'defender' => 'def',
+            'midfielder' => 'mid',
+            'forward' => 'fwd'
+        ];
+        return $map[strtolower((string)$pos)] ?? 'mid';
+    }
+}
+
+if (!function_exists('mapPositionTypeColor')) {
+    function mapPositionTypeColor($posType) {
+        $colors = [
+            'gk' => '#F97316', // Orange
+            'def' => '#1E3A8A', // Navy
+            'mid' => '#15803d', // Green
+            'fwd' => '#dc2626'  // Red
+        ];
+        return $colors[$posType] ?? '#15803d';
+    }
+}
+
 

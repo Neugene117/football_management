@@ -40,7 +40,7 @@ $playersList = db_fetch_all("
           $pColor = $posType === 'gk' ? '#F97316' : ($posType === 'def' ? '#1E3A8A' : ($posType === 'mid' ? '#15803d' : '#dc2626'));
           $rating = (int) ($pl['average_rating'] ?: 75);
         ?>
-          <div class="player-card" data-pos="<?= $posType; ?>" data-search="<?= e(strtolower($pl['first_name'] . ' ' . $pl['last_name'] . ' ' . $pl['team_name'] . ' ' . $pl['nationality'] . ' ' . $pl['position'])); ?>" style="background: #fff; border: 1px solid var(--gray-l); border-radius: var(--rl); overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.02); transition: transform 0.2s; text-align: center;">
+          <div class="player-card" onclick="location.href='players.php?id=<?= (int) $pl['id']; ?>'" data-pos="<?= $posType; ?>" data-search="<?= e(strtolower($pl['first_name'] . ' ' . $pl['last_name'] . ' ' . $pl['team_name'] . ' ' . $pl['nationality'] . ' ' . $pl['position'])); ?>" style="background: #fff; border: 1px solid var(--gray-l); border-radius: var(--rl); overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.02); transition: transform 0.2s; text-align: center; cursor: pointer;">
             <div class="pc-img" style="height: 100px; position: relative; overflow: hidden;">
               <img src="<?= e($pl['photo_pl'] ?: 'https://images.unsplash.com/photo-1627483297886-49710ae1fc22?w=300&q=80'); ?>" alt="" style="width: 100%; height: 100%; object-fit: cover; object-position: top;"/>
               <div class="pc-img-ov" style="background: linear-gradient(to top, <?= $pColor; ?>bb, transparent); position: absolute; inset: 0;"></div>

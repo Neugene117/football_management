@@ -71,9 +71,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         } else {
             // Schedule new match
+            $status = 'scheduled';
             $done = db_execute(
                 'INSERT INTO matches (federation_id, competition_id, home_team_id, away_team_id, stadium_id, match_date, match_time, matchday, round, status, scheduled_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-                'iiiiissssis',
+                'iiiiisssssi',
                 [$federationId, $competitionId, $homeTeamId, $awayTeamId, $stadiumId, $matchDate, $matchTime ?: null, $matchday, $round ?: null, $status, $scheduledBy ?: null]
             );
 
@@ -353,6 +354,7 @@ $stadiums = db_fetch_all('SELECT id, name, city FROM stadiums ORDER BY name ASC'
                         <input type="text" name="round" value="<?= e($editing['round'] ?? ''); ?>" placeholder="e.g. Regular Season, Quarter-final">
                     </label>
 
+                    <?php if ($editing): ?>
                     <label class="full">Status
                         <select name="status">
                             <?php $currStatus = $editing['status'] ?? 'scheduled'; ?>
@@ -365,6 +367,7 @@ $stadiums = db_fetch_all('SELECT id, name, city FROM stadiums ORDER BY name ASC'
                             <option value="cancelled" <?= ($currStatus === 'cancelled') ? 'selected' : ''; ?>>Cancelled</option>
                         </select>
                     </label>
+                    <?php endif; ?>
                 </div>
             </div>
             <div class="modal-foot">
